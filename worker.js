@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.0B Cloud';
+const VERSION = 'RADAR v0.4.0C Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 
 const HTML = `<!doctype html>
@@ -13,7 +13,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub">ORBYT Playlist Intelligence</div></div></div><div class="version">v0.4.0B · Contact-First Discovery</div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub">ORBYT Playlist Intelligence</div></div></div><div class="version">v0.4.0C · Deep Contact Scan</div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label>Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -32,9 +32,51 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 function metric(label,val){return '<div class="metric"><b>'+esc(val)+'</b><span>'+label+'</span></div>'}
 function badgeClass(label){return label==='Strong Match'?'':label==='Worth Checking'?'mid':'weak'}
-function contactSummary(r){const bits=[];if(r.email)bits.push('Email ✓');if(r.instagram)bits.push('Instagram ✓');if(r.submission)bits.push('Submission ✓');return bits.length?bits.join(' · '):'Contatto non ancora verificato'}
+function contactSummary(r){const bits=[];if(r.email)bits.push('Email ✓');if(r.instagram)bits.push('Instagram ✓');if(r.submission)bits.push('Submission ✓');if(r.site)bits.push('Sito ✓');return bits.length?bits.join(' · '):'Contatto non ancora verificato'}
 function render(items){const box=$('#results');$('#count').textContent=items.length+' risultati';if(!items.length){box.innerHTML='<div class="empty">Nessuna playlist con contatti pubblici sufficientemente associati. Prova Analisi Completa o un genere più ampio.</div>';return}box.innerHTML=items.map((r,i)=>'<article class="card"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||'Segnale web pubblico')+'</div><div class="source" style="color:var(--green);margin-top:8px"><b>'+esc(contactSummary(r))+'</b></div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(r.badge)+'</span></div><div class="metrics">'+metric('RADAR Score',r.score)+metric('Contactability',r.contactability||0)+metric('Match',r.match)+metric('Confidence',r.confidence)+'</div><div class="why"><b>PERCHÉ QUESTA PLAYLIST?</b><br>'+esc(r.why)+'</div><div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">Apri su Spotify</a><button class="curatorBtn" data-index="'+i+'" data-playlist-name="'+esc(r.name)+'" data-spotify-url="'+esc(r.spotifyUrl)+'">Approfondisci contatti</button></div><div class="curatorBox" id="curator-'+i+'"></div></article>').join('')}
-async function discover(){const b=$('#discover');b.disabled=true;$('#status').textContent='Scansione web in corso…';try{const res=await fetch('/api/discover',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Errore ricerca');render(data.results||[]);$('#status').textContent=(data.braveConfigured?'Brave attivo':'Demo')+' · '+(data.results||[]).length+' playlist'}catch(e){$('#status').innerHTML='<span class="error">'+esc(e.message)+'</span>'}finally{b.disabled=false}}
+async function discover(){
+  const b=$('#discover');b.disabled=true;
+  const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
+  try{
+    $('#results').innerHTML='<div class="empty">Fase 1/3 · Cerco playlist candidate…</div>';
+    $('#status').textContent='Discovery playlist…';
+    const baseRes=await fetch('/api/discover-base',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
+    const base=await baseRes.json();
+    if(!baseRes.ok)throw new Error(base.error||'Errore discovery');
+    const candidates=base.candidates||[];
+    $('#count').textContent=candidates.length+' candidate';
+    if(payload.objective!=='contact'){
+      render(candidates);
+      $('#status').textContent='Brave attivo · '+candidates.length+' playlist';
+      return;
+    }
+    if(!candidates.length){
+      render([]);
+      $('#status').textContent='Brave attivo · 0 candidate';
+      return;
+    }
+    const final=[];
+    const chunkSize=3;
+    for(let i=0;i<candidates.length;i+=chunkSize){
+      const chunk=candidates.slice(i,i+chunkSize);
+      const done=Math.min(i+chunk.length,candidates.length);
+      $('#results').innerHTML='<div class="empty">Fase 2/3 · Ricerca contatti '+i+'/'+candidates.length+'<br><br>Verifico email, Instagram, submission e sito per ogni playlist.</div>';
+      $('#status').textContent='Ricerca contatti · '+i+'/'+candidates.length;
+      const er=await fetch('/api/contact-enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,candidates:chunk})});
+      const ed=await er.json();
+      if(!er.ok)throw new Error(ed.error||'Errore ricerca contatti');
+      final.push(...(ed.results||[]));
+      $('#status').textContent='Ricerca contatti · '+done+'/'+candidates.length;
+    }
+    $('#results').innerHTML='<div class="empty">Fase 3/3 · Verifico le associazioni e ordino i risultati…</div>';
+    const filtered=final.filter(r=>r.contactability>=30 && (r.email||r.instagram||r.submission||r.site))
+      .sort((a,b)=>b.score-a.score||b.contactability-a.contactability);
+    render(filtered.slice(0,payload.mode==='complete'?24:12));
+    $('#status').textContent='Brave attivo · '+filtered.length+' contattabili su '+candidates.length+' candidate';
+  }catch(e){
+    $('#status').innerHTML='<span class="error">'+esc(e.message)+'</span>';
+  }finally{b.disabled=false}
+}
 function confLabel(n){n=Number(n)||0;return n>=75?['Alta','high']:n>=50?['Media','medium']:['Bassa','low']}
 function confPill(n){const c=confLabel(n);return '<span class="conf '+c[1]+'">'+c[0]+' '+Math.round(Number(n)||0)+'</span>'}
 function contactRow(label,value,confidence,actionHtml){return '<div class="kv"><small>'+esc(label)+'</small><div class="contactValue"><span>'+esc(value||'Non trovato')+'</span>'+(value?confPill(confidence):'')+(actionHtml||'')+'</div></div>'}
@@ -101,60 +143,85 @@ function buildQueries(input){const genre=String(input.genre||'').trim();const ar
 function scoreResult(r,input){const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));const genreTerms=normalize(input.genre||'').split(/\s+/).filter(x=>x.length>2);const artists=String(input.artists||'').split(',').map(normalize).filter(Boolean);const matchHits=genreTerms.filter(t=>text.includes(t)).length+artists.filter(a=>text.includes(a)).length*2;let match=clamp(40+matchHits*12);let activity=45;if(/updated|weekly|daily|new music|2026|fresh|latest/.test(text))activity+=20;if(/2025|2024|archive|old/.test(text))activity-=15;let curator=45;if(/curator|submit|submission|instagram|gmail|contact|linktr/.test(text))curator+=20;let contact=35;if(/@|instagram|submit|submission|contact|linktr|beacons/.test(text))contact+=25;let history=50;const strategy=input.strategy||'balanced';let score=.35*activity+.30*match+.15*curator+.10*contact+.10*history;if(strategy==='audience')score+=activity*.08;if(strategy==='coverage')score+=match*.05+contact*.04;if(strategy==='new')score+=curator*.05;score=clamp(score);const confidence=clamp(42+(r.description?18:0)+(cleanPlaylistUrl(r.url)?18:0)+(matchHits>0?12:0)+(contact>50?8:0));const badge=score>=72?'Strong Match':score>=55?'Worth Checking':'Weak Match';const why=[];if(match>=65)why.push('buona coerenza con genere/artisti');if(activity>=60)why.push('segnali web di attività recente');if(contact>=55)why.push('tracce pubbliche di contatto/submission');if(!why.length)why.push('match preliminare da verificare');return{score,activity:clamp(activity),match,confidence,badge,why:why.join('; ')+'.'} }
 
 function contactabilityFromEvidence(ev){
-  const email=ev.email?.[0]||'', instagram=ev.instagram?.[0]||'', submission=ev.submission?.[0]||'';
-  const emailC=clamp(ev.email?.[1]||0), igC=clamp(ev.instagram?.[1]||0), subC=clamp(ev.submission?.[1]||0);
-  let score=0;if(email)score+=40;if(instagram)score+=30;if(submission)score+=30;
-  score+=Math.round((emailC+igC+subC)/15);
-  return{score:clamp(score),email,instagram,submission,emailConfidence:emailC,instagramConfidence:igC,submissionConfidence:subC};
-}
-
-async function enrichContactFirst(candidates,input,env){
-  const limit=input.mode==='complete'?24:12;
-  const pool=candidates.slice(0,limit);
-  const groups=[];for(let i=0;i<pool.length;i+=3)groups.push(pool.slice(i,i+3));
-  const batchResults=await Promise.all(groups.map(async group=>{
-    const names=group.map(x=>'\"'+x.name.replace(/\"/g,'')+'\"').join(' OR ');
-    const q='('+names+') Spotify playlist curator contact email Instagram submit music';
-    const results=await braveSearch(q,env,input.mode==='complete'?20:15).catch(()=>[]);
-    return{group,results};
-  }));
-  const enriched=[];
-  for(const pack of batchResults){for(const c of pack.group){
-    const ev=contactEvidence(pack.results,c.name);const ct=contactabilityFromEvidence(ev);
-    enriched.push({...c,...ct});
-  }}
-  const missing=enriched.filter(x=>x.contactability<35).slice(0,input.mode==='complete'?6:3);
-  await Promise.all(missing.map(async c=>{
-    const results=await braveSearch('\"'+c.name.replace(/\"/g,'')+'\" Spotify playlist curator email Instagram submit',env,12).catch(()=>[]);
-    const ct=contactabilityFromEvidence(contactEvidence(results,c.name));Object.assign(c,ct);
-  }));
-  return enriched;
+  const email=ev.email?.[0]||'', instagram=ev.instagram?.[0]||'', submission=ev.submission?.[0]||'', site=ev.site?.[0]||'';
+  const emailC=clamp(ev.email?.[1]||0), igC=clamp(ev.instagram?.[1]||0), subC=clamp(ev.submission?.[1]||0), siteC=clamp(ev.site?.[1]||0);
+  let score=0;
+  if(email)score+=38;
+  if(instagram)score+=25;
+  if(submission)score+=30;
+  if(site)score+=12;
+  score+=Math.round((emailC+igC+subC+siteC)/18);
+  const strongest=Math.max(emailC,igC,subC,siteC);
+  if(strongest<25)score=Math.min(score,28);
+  return{contactability:clamp(score),email,instagram,submission,site,emailConfidence:emailC,instagramConfidence:igC,submissionConfidence:subC,siteConfidence:siteC};
 }
 
 function rescoreContactFirst(r,input){
   if((input.objective||'contact')!=='contact')return r;
-  let score=clamp(r.match*.34+r.contactability*.36+r.activity*.12+r.confidence*.18);
-  if(r.contactability<35)score=clamp(score-25);
-  const badge=score>=74&&r.contactability>=55?'Strong Match':score>=56?'Worth Checking':'Weak Match';
-  const why=[];if(r.contactability>=70)why.push('contatto pubblico forte già trovato');else if(r.contactability>=35)why.push('almeno un canale pubblico utile trovato');if(r.match>=65)why.push('buona coerenza con genere/artisti');if(r.activity>=60)why.push('segnali web di attività recente');
+  let score=clamp(r.match*.32+r.contactability*.40+r.activity*.10+r.confidence*.18);
+  if(r.contactability<30)score=clamp(score-28);
+  const badge=score>=74&&r.contactability>=55?'Strong Match':score>=56&&r.contactability>=30?'Worth Checking':'Weak Match';
+  const why=[];
+  if(r.contactability>=70)why.push('contatto pubblico forte verificato sul web');
+  else if(r.contactability>=30)why.push('almeno un canale pubblico utile associato');
+  if(r.match>=65)why.push('buona coerenza con genere/artisti');
+  if(r.activity>=60)why.push('segnali web di attività recente');
   return{...r,score,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};
 }
 
-async function discover(input,env){
-  const genre=String(input.genre||'').trim();if(!genre)return{results:[],braveConfigured:!!env.BRAVE_API_KEY};
-  if(!env.BRAVE_API_KEY){return{braveConfigured:false,results:[]}}
+async function deepContactForCandidate(c,input,env){
+  const raw=String(c.name||'').replace(/"/g,'').trim();
+  const genre=String(input.genre||'').replace(/"/g,'').trim();
+  const queries=[
+    '"'+raw+'" Spotify playlist curator contact email Instagram',
+    '"'+raw+'" playlist submit music submission contact',
+    '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
+  ];
+  const batches=await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[])));
+  const results=batches.flat();
+  const ev=contactEvidence(results,c.name);
+  const ct=contactabilityFromEvidence(ev);
+  return rescoreContactFirst({...c,...ct},input);
+}
+
+async function discoverBase(input,env){
+  const genre=String(input.genre||'').trim();
+  if(!genre)return{braveConfigured:!!env.BRAVE_API_KEY,candidates:[]};
+  if(!env.BRAVE_API_KEY)return{braveConfigured:false,candidates:[]};
   const queries=buildQueries(input);
-  const batches=await Promise.all(queries.map(q=>braveSearch(q,env,10).catch(()=>[])));
+  const batches=await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[])));
   const map=new Map();
-  for(const r of batches.flat()){const spotifyUrl=cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title);if(!spotifyUrl||map.has(spotifyUrl))continue;const base=scoreResult(r,input);map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',...base})}
-  let results=[...map.values()].sort((a,b)=>b.score-a.score);
-  if((input.objective||'contact')==='contact'){
-    results=await enrichContactFirst(results,input,env);
-    results=results.map(r=>rescoreContactFirst(r,input)).filter(r=>r.contactability>=35);
-    results.sort((a,b)=>b.score-a.score||b.contactability-a.contactability);
-    results=results.slice(0,input.mode==='complete'?30:15);
-  }else{results=results.slice(0,input.mode==='complete'?50:30)}
-  return{braveConfigured:true,objective:input.objective||'contact',results};
+  for(const r of batches.flat()){
+    const spotifyUrl=cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title);
+    if(!spotifyUrl||map.has(spotifyUrl))continue;
+    const base=scoreResult(r,input);
+    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',...base});
+  }
+  let candidates=[...map.values()].sort((a,b)=>b.score-a.score);
+  const cap=input.mode==='complete'?18:9;
+  candidates=candidates.slice(0,cap);
+  return{braveConfigured:true,candidates};
+}
+
+async function enrichContactBatch(input,env){
+  if(!env.BRAVE_API_KEY)return{braveConfigured:false,results:[]};
+  const candidates=Array.isArray(input.candidates)?input.candidates.slice(0,3):[];
+  const results=await Promise.all(candidates.map(c=>deepContactForCandidate(c,input,env)));
+  return{braveConfigured:true,results};
+}
+
+async function discover(input,env){
+  const base=await discoverBase(input,env);
+  if((input.objective||'contact')!=='contact')return{braveConfigured:base.braveConfigured,objective:'playlist',results:base.candidates};
+  const out=[];
+  for(let i=0;i<base.candidates.length;i+=3){
+    const part=await enrichContactBatch({...input,candidates:base.candidates.slice(i,i+3)},env);
+    out.push(...part.results);
+  }
+  const results=out.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site))
+    .sort((a,b)=>b.score-a.score||b.contactability-a.contactability)
+    .slice(0,input.mode==='complete'?24:12);
+  return{braveConfigured:base.braveConfigured,objective:'contact',results};
 }
 
 async function discoverCurator(input,env){
@@ -353,4 +420,7 @@ export default {async fetch(request,env){const url=new URL(request.url);
         try{return json(await updateCampaignPlaylist(await request.json(),env))}
         catch(e){return json({ok:false,error:String(e.message||e)},400)}
       }
-if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,dbConfigured:!!env.DB});if(url.pathname==='/api/discover'&&request.method==='POST'){try{return json(await discover(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery'},500)}}if(url.pathname==='/api/curator'&&request.method==='POST'){try{return json(await discoverCurator(await request.json(),env))}catch(e){return json({error:e.message||'Errore curator discovery'},500)}}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(HTML,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});return new Response('Not Found',{status:404})}};
+if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,dbConfigured:!!env.DB});
+if(url.pathname==='/api/discover-base'&&request.method==='POST'){try{return json(await discoverBase(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery base'},500)}}
+if(url.pathname==='/api/contact-enrich'&&request.method==='POST'){try{return json(await enrichContactBatch(await request.json(),env))}catch(e){return json({error:e.message||'Errore contact enrich'},500)}}
+if(url.pathname==='/api/discover'&&request.method==='POST'){try{return json(await discover(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery'},500)}}if(url.pathname==='/api/curator'&&request.method==='POST'){try{return json(await discoverCurator(await request.json(),env))}catch(e){return json({error:e.message||'Errore curator discovery'},500)}}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(HTML,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});return new Response('Not Found',{status:404})}};
