@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.1 Cloud';
+const VERSION = 'RADAR v0.4.1.1 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 
@@ -27,7 +27,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.1</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.1.1</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label>Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -77,6 +77,12 @@ function paintResults(items){
   box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||'Segnale web pubblico')+'</div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(r.badge)+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">Apri su Spotify</a></div></div></div></article>').join('');
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
+let scanClock=null,scanStarted=0;
+function scanStart(){const p=$('#scanPanel');p.classList.add('active');scanStarted=Date.now();clearInterval(scanClock);scanClock=setInterval(()=>{$('#scanTimer').textContent='Tempo '+Math.floor((Date.now()-scanStarted)/1000)+'s';},1000);scanUpdate(4,'Avvio scansione','Interrogo i motori e costruisco la lista iniziale.',{candidates:0,checked:0,contacts:0,google:0});}
+function scanUpdate(pct,title,msg,stats={}){pct=Math.max(4,Math.min(100,Math.round(pct)));$('#scanProgress').style.width=pct+'%';$('#scanPct').textContent=pct+'%';if(title)$('#scanTitle').textContent=title;if(msg)$('#scanMessage').textContent=msg;if(stats.candidates!=null)$('#statCandidates').textContent=stats.candidates;if(stats.checked!=null)$('#statChecked').textContent=stats.checked;if(stats.contacts!=null)$('#statContacts').textContent=stats.contacts;if(stats.google!=null)$('#statGoogle').textContent=stats.google;}
+function scanFinish(title,msg,stats={}){scanUpdate(100,title,msg,stats);clearInterval(scanClock);scanClock=null;setTimeout(()=>$('#scanPanel').classList.remove('active'),1800);}
+function scanError(msg){clearInterval(scanClock);scanClock=null;scanUpdate(100,'Scansione interrotta',msg);$('#scanEngine').textContent='Controlla lo stato dei motori e riprova';}
+
 async function discover(){
   const b=$('#discover');b.disabled=true;
   const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
