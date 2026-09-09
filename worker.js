@@ -1,5 +1,6 @@
-const VERSION = 'RADAR v0.4.0C Cloud';
+const VERSION = 'RADAR v0.4.0D Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
+const SERPAPI_API = 'https://serpapi.com/search';
 
 const HTML = `<!doctype html>
 <html lang="it">
@@ -13,7 +14,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub">ORBYT Playlist Intelligence</div></div></div><div class="version">v0.4.0C · Deep Contact Scan</div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub">ORBYT Playlist Intelligence</div></div></div><div class="version">v0.4.0D · Dual-Engine Contact Scan</div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label>Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -37,22 +38,25 @@ function render(items){const box=$('#results');$('#count').textContent=items.len
 async function discover(){
   const b=$('#discover');b.disabled=true;
   const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
+  let googleUsed=0;
+  const googleMax=payload.mode==='complete'?6:3;
   try{
-    $('#results').innerHTML='<div class="empty">Fase 1/3 · Cerco playlist candidate…</div>';
+    $('#results').innerHTML='<div class="empty">Fase 1/3 · Cerco playlist candidate su Brave e, se serve, Google…</div>';
     $('#status').textContent='Discovery playlist…';
     const baseRes=await fetch('/api/discover-base',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const base=await baseRes.json();
     if(!baseRes.ok)throw new Error(base.error||'Errore discovery');
     const candidates=base.candidates||[];
+    googleUsed+=Number(base.googleUsed||0);
     $('#count').textContent=candidates.length+' candidate';
     if(payload.objective!=='contact'){
       render(candidates);
-      $('#status').textContent='Brave attivo · '+candidates.length+' playlist';
+      $('#status').textContent='Brave '+(base.braveConfigured?'ON':'OFF')+' · Google '+(base.serpapiConfigured?'ON':'OFF')+' · '+candidates.length+' playlist';
       return;
     }
     if(!candidates.length){
       render([]);
-      $('#status').textContent='Brave attivo · 0 candidate';
+      $('#status').textContent='0 candidate · controlla genere o motori di ricerca';
       return;
     }
     const final=[];
@@ -60,19 +64,21 @@ async function discover(){
     for(let i=0;i<candidates.length;i+=chunkSize){
       const chunk=candidates.slice(i,i+chunkSize);
       const done=Math.min(i+chunk.length,candidates.length);
-      $('#results').innerHTML='<div class="empty">Fase 2/3 · Ricerca contatti '+i+'/'+candidates.length+'<br><br>Verifico email, Instagram, submission e sito per ogni playlist.</div>';
-      $('#status').textContent='Ricerca contatti · '+i+'/'+candidates.length;
-      const er=await fetch('/api/contact-enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,candidates:chunk})});
+      const remainingGoogle=Math.max(0,googleMax-googleUsed);
+      $('#results').innerHTML='<div class="empty">Fase 2/3 · Ricerca contatti '+i+'/'+candidates.length+'<br><br>Brave scandaglia per primo. Google interviene solo dove mancano contatti utili.</div>';
+      $('#status').textContent='Ricerca contatti · '+i+'/'+candidates.length+' · Google fallback '+googleUsed+'/'+googleMax;
+      const er=await fetch('/api/contact-enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,candidates:chunk,googleSlots:remainingGoogle})});
       const ed=await er.json();
       if(!er.ok)throw new Error(ed.error||'Errore ricerca contatti');
+      googleUsed+=Number(ed.googleUsed||0);
       final.push(...(ed.results||[]));
-      $('#status').textContent='Ricerca contatti · '+done+'/'+candidates.length;
+      $('#status').textContent='Ricerca contatti · '+done+'/'+candidates.length+' · Google usato '+googleUsed+' volte';
     }
-    $('#results').innerHTML='<div class="empty">Fase 3/3 · Verifico le associazioni e ordino i risultati…</div>';
+    $('#results').innerHTML='<div class="empty">Fase 3/3 · Incrocio Brave + Google, verifico associazioni e ordino…</div>';
     const filtered=final.filter(r=>r.contactability>=30 && (r.email||r.instagram||r.submission||r.site))
       .sort((a,b)=>b.score-a.score||b.contactability-a.contactability);
     render(filtered.slice(0,payload.mode==='complete'?24:12));
-    $('#status').textContent='Brave attivo · '+filtered.length+' contattabili su '+candidates.length+' candidate';
+    $('#status').textContent='Dual-engine · '+filtered.length+' contattabili su '+candidates.length+' · Google fallback '+googleUsed;
   }catch(e){
     $('#status').innerHTML='<span class="error">'+esc(e.message)+'</span>';
   }finally{b.disabled=false}
@@ -82,7 +88,7 @@ function confPill(n){const c=confLabel(n);return '<span class="conf '+c[1]+'">'+
 function contactRow(label,value,confidence,actionHtml){return '<div class="kv"><small>'+esc(label)+'</small><div class="contactValue"><span>'+esc(value||'Non trovato')+'</span>'+(value?confPill(confidence):'')+(actionHtml||'')+'</div></div>'}
 async function copyText(text,button){try{await navigator.clipboard.writeText(text);const old=button.textContent;button.textContent='Copiata';setTimeout(()=>button.textContent=old,1200)}catch(e){button.textContent='Copia fallita'}}
 async function findCurator(button){const idx=button.dataset.index, box=document.getElementById('curator-'+idx);box.classList.add('open');box.innerHTML='<div class="status">Curator Intelligence: verifico associazioni e contatti pubblici…</div>';const old=button.textContent;button.textContent='Analisi curatore…';button.disabled=true;try{const res=await fetch('/api/curator',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({playlistName:button.dataset.playlistName,spotifyUrl:button.dataset.spotifyUrl})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Ricerca contatti non riuscita');const links=[];if(d.instagram)links.push('<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(d.instagram)+'">Apri Instagram</a>');if(d.submission)links.push('<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(d.submission)+'">Apri Submission</a>');if(d.site)links.push('<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(d.site)+'">Apri sito</a>');const copyEmail=d.email?'<button class="microAction copyEmail" data-email="'+esc(d.email)+'">Copia email</button>':'';box.innerHTML='<div class="ciHead"><div class="ciTitle">Curator Intelligence</div><div class="ciScore">Curator Match '+esc(d.curatorMatch)+'/100</div></div><div class="curatorGrid">'+contactRow('Possibile curatore',d.curator,d.curatorConfidence,'')+contactRow('Email pubblica',d.email,d.emailConfidence,copyEmail)+contactRow('Instagram',d.instagramHandle||d.instagram,d.instagramConfidence,'')+contactRow('Submission page',d.submission?'Disponibile':'',d.submissionConfidence,'')+contactRow('Sito',d.site,d.siteConfidence,'')+'</div><div class="association"><b>PERCHÉ QUESTO CONTATTO?</b><br>'+esc(d.reason)+'</div><div class="cardActions">'+links.join('')+'</div>'}catch(e){box.innerHTML='<div class="error">'+esc(e.message)+'</div>'}finally{button.textContent=old;button.disabled=false}}
-document.addEventListener('click',e=>{const b=e.target.closest('.curatorBtn');if(b)findCurator(b);const c=e.target.closest('.copyEmail');if(c)copyText(c.dataset.email,c)});$('#discover').addEventListener('click',discover);$('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/health').then(r=>r.json());$('#status').textContent=d.version+' · Brave '+(d.braveConfigured?'ON':'OFF')}catch(e){$('#status').textContent='Health check fallito'}});
+document.addEventListener('click',e=>{const b=e.target.closest('.curatorBtn');if(b)findCurator(b);const c=e.target.closest('.copyEmail');if(c)copyText(c.dataset.email,c)});$('#discover').addEventListener('click',discover);$('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/health').then(r=>r.json());$('#status').textContent=d.version+' · Brave '+(d.braveConfigured?'ON':'OFF')+' · Google '+(d.serpapiConfigured?'ON':'OFF')+' · DB '+(d.dbConfigured?'ON':'OFF')}catch(e){$('#status').textContent='Health check fallito'}});
 </script></body></html>`;
 
 function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}})}
@@ -138,6 +144,27 @@ function contactEvidence(results,playlistName){
 
 async function braveSearch(query,env,count=10){if(!env.BRAVE_API_KEY)return[];const u=new URL(BRAVE_API);u.searchParams.set('q',query);u.searchParams.set('count',String(Math.min(20,count)));u.searchParams.set('safesearch','moderate');const r=await fetch(u,{headers:{Accept:'application/json','Accept-Encoding':'gzip','X-Subscription-Token':env.BRAVE_API_KEY}});if(!r.ok)throw new Error('Brave API HTTP '+r.status);const d=await r.json();return (d.web&&d.web.results)||[]}
 
+async function serpSearch(query,env,count=10){
+  if(!env.SERPAPI_KEY)return[];
+  const u=new URL(SERPAPI_API);
+  u.searchParams.set('engine','google');
+  u.searchParams.set('q',query);
+  u.searchParams.set('api_key',env.SERPAPI_KEY);
+  u.searchParams.set('num',String(Math.min(10,count)));
+  u.searchParams.set('hl','en');
+  u.searchParams.set('safe','active');
+  const r=await fetch(u,{headers:{Accept:'application/json'}});
+  if(!r.ok)throw new Error('SerpAPI HTTP '+r.status);
+  const d=await r.json();
+  if(d.error)throw new Error('SerpAPI: '+d.error);
+  return (d.organic_results||[]).map(x=>({
+    title:x.title||'',
+    description:x.snippet||'',
+    url:x.link||''
+  }));
+}
+
+
 function buildQueries(input){const genre=String(input.genre||'').trim();const artists=String(input.artists||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);const q=[];if(genre){q.push('site:open.spotify.com/playlist "'+genre+'" playlist');q.push('"'+genre+'" "Spotify playlist" submissions curator')}for(const a of artists)q.push('"'+a+'" "'+genre+'" Spotify playlist');if(input.mode==='complete'){q.push('"'+genre+'" playlist curator Instagram');for(const a of artists)q.push('"'+a+'" playlist curator submit music')}return unique(q).slice(0,input.mode==='complete'?7:4)}
 
 function scoreResult(r,input){const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));const genreTerms=normalize(input.genre||'').split(/\s+/).filter(x=>x.length>2);const artists=String(input.artists||'').split(',').map(normalize).filter(Boolean);const matchHits=genreTerms.filter(t=>text.includes(t)).length+artists.filter(a=>text.includes(a)).length*2;let match=clamp(40+matchHits*12);let activity=45;if(/updated|weekly|daily|new music|2026|fresh|latest/.test(text))activity+=20;if(/2025|2024|archive|old/.test(text))activity-=15;let curator=45;if(/curator|submit|submission|instagram|gmail|contact|linktr/.test(text))curator+=20;let contact=35;if(/@|instagram|submit|submission|contact|linktr|beacons/.test(text))contact+=25;let history=50;const strategy=input.strategy||'balanced';let score=.35*activity+.30*match+.15*curator+.10*contact+.10*history;if(strategy==='audience')score+=activity*.08;if(strategy==='coverage')score+=match*.05+contact*.04;if(strategy==='new')score+=curator*.05;score=clamp(score);const confidence=clamp(42+(r.description?18:0)+(cleanPlaylistUrl(r.url)?18:0)+(matchHits>0?12:0)+(contact>50?8:0));const badge=score>=72?'Strong Match':score>=55?'Worth Checking':'Weak Match';const why=[];if(match>=65)why.push('buona coerenza con genere/artisti');if(activity>=60)why.push('segnali web di attività recente');if(contact>=55)why.push('tracce pubbliche di contatto/submission');if(!why.length)why.push('match preliminare da verificare');return{score,activity:clamp(activity),match,confidence,badge,why:why.join('; ')+'.'} }
@@ -169,7 +196,7 @@ function rescoreContactFirst(r,input){
   return{...r,score,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};
 }
 
-async function deepContactForCandidate(c,input,env){
+async function deepContactForCandidate(c,input,env,allowGoogle=false){
   const raw=String(c.name||'').replace(/"/g,'').trim();
   const genre=String(input.genre||'').replace(/"/g,'').trim();
   const queries=[
@@ -177,21 +204,43 @@ async function deepContactForCandidate(c,input,env){
     '"'+raw+'" playlist submit music submission contact',
     '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
   ];
-  const batches=await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[])));
-  const results=batches.flat();
-  const ev=contactEvidence(results,c.name);
-  const ct=contactabilityFromEvidence(ev);
-  return rescoreContactFirst({...c,...ct},input);
+  const braveBatches=await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[])));
+  let results=braveBatches.flat();
+  let ev=contactEvidence(results,c.name);
+  let ct=contactabilityFromEvidence(ev);
+  let googleUsed=0;
+  if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
+    const googleQuery='"'+raw+'" Spotify playlist curator email Instagram submit music contact';
+    const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
+    if(googleResults.length){
+      results=results.concat(googleResults);
+      ev=contactEvidence(results,c.name);
+      ct=contactabilityFromEvidence(ev);
+    }
+    googleUsed=1;
+  }
+  return{result:rescoreContactFirst({...c,...ct,searchSources:googleUsed?'Brave + Google':'Brave'},input),googleUsed};
 }
 
 async function discoverBase(input,env){
   const genre=String(input.genre||'').trim();
-  if(!genre)return{braveConfigured:!!env.BRAVE_API_KEY,candidates:[]};
-  if(!env.BRAVE_API_KEY)return{braveConfigured:false,candidates:[]};
+  if(!genre)return{braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed:0,candidates:[]};
+  if(!env.BRAVE_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,serpapiConfigured:false,googleUsed:0,candidates:[]};
   const queries=buildQueries(input);
-  const batches=await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[])));
+  const braveBatches=env.BRAVE_API_KEY?await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[]))):[];
+  let rawResults=braveBatches.flat();
+  let googleUsed=0;
+  const desired=input.mode==='complete'?10:5;
+  const initialSpotifyCount=unique(rawResults.map(r=>cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title))).length;
+  if(env.SERPAPI_KEY && initialSpotifyCount<desired){
+    const artists=String(input.artists||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,2).join(' ');
+    const q='"'+genre+'" Spotify playlist" curator submit music contact '+artists;
+    const g=await serpSearch(q,env,10).catch(()=>[]);
+    rawResults=rawResults.concat(g);
+    googleUsed=1;
+  }
   const map=new Map();
-  for(const r of batches.flat()){
+  for(const r of rawResults){
     const spotifyUrl=cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title);
     if(!spotifyUrl||map.has(spotifyUrl))continue;
     const base=scoreResult(r,input);
@@ -200,28 +249,38 @@ async function discoverBase(input,env){
   let candidates=[...map.values()].sort((a,b)=>b.score-a.score);
   const cap=input.mode==='complete'?18:9;
   candidates=candidates.slice(0,cap);
-  return{braveConfigured:true,candidates};
+  return{braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,candidates};
 }
 
 async function enrichContactBatch(input,env){
-  if(!env.BRAVE_API_KEY)return{braveConfigured:false,results:[]};
+  if(!env.BRAVE_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,serpapiConfigured:false,googleUsed:0,results:[]};
   const candidates=Array.isArray(input.candidates)?input.candidates.slice(0,3):[];
-  const results=await Promise.all(candidates.map(c=>deepContactForCandidate(c,input,env)));
-  return{braveConfigured:true,results};
+  let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
+  let googleUsed=0;
+  const results=[];
+  for(const c of candidates){
+    const pack=await deepContactForCandidate(c,input,env,slots>0);
+    results.push(pack.result);
+    if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}
+  }
+  return{braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results};
 }
 
 async function discover(input,env){
   const base=await discoverBase(input,env);
-  if((input.objective||'contact')!=='contact')return{braveConfigured:base.braveConfigured,objective:'playlist',results:base.candidates};
+  if((input.objective||'contact')!=='contact')return{braveConfigured:base.braveConfigured,serpapiConfigured:base.serpapiConfigured,googleUsed:base.googleUsed,objective:'playlist',results:base.candidates};
   const out=[];
+  let googleUsed=base.googleUsed||0;
+  const googleMax=input.mode==='complete'?6:3;
   for(let i=0;i<base.candidates.length;i+=3){
-    const part=await enrichContactBatch({...input,candidates:base.candidates.slice(i,i+3)},env);
+    const part=await enrichContactBatch({...input,candidates:base.candidates.slice(i,i+3),googleSlots:Math.max(0,googleMax-googleUsed)},env);
+    googleUsed+=part.googleUsed||0;
     out.push(...part.results);
   }
   const results=out.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site))
     .sort((a,b)=>b.score-a.score||b.contactability-a.contactability)
     .slice(0,input.mode==='complete'?24:12);
-  return{braveConfigured:base.braveConfigured,objective:'contact',results};
+  return{braveConfigured:base.braveConfigured,serpapiConfigured:base.serpapiConfigured,googleUsed,objective:'contact',results};
 }
 
 async function discoverCurator(input,env){
@@ -235,8 +294,14 @@ async function discoverCurator(input,env){
     '"'+name+'" playlist website'
   ];
   const batches=await Promise.all(queries.map(q=>braveSearch(q,env,10).catch(()=>[])));
-  const results=batches.flat();
-  const ev=contactEvidence(results,name);
+  let results=batches.flat();
+  let ev=contactEvidence(results,name);
+  let pre=contactabilityFromEvidence(ev);
+  if(env.SERPAPI_KEY && pre.contactability<30){
+    const g=await serpSearch('"'+name+'" Spotify playlist curator email Instagram submit music contact',env,10).catch(()=>[]);
+    results=results.concat(g);
+    ev=contactEvidence(results,name);
+  }
   const email=ev.email[0]||'', instagram=ev.instagram[0]||'', submission=ev.submission[0]||'', site=ev.site[0]||'';
   const curator=guessCuratorName(name,results);
   const nameNorm=normalize(name);
@@ -420,7 +485,7 @@ export default {async fetch(request,env){const url=new URL(request.url);
         try{return json(await updateCampaignPlaylist(await request.json(),env))}
         catch(e){return json({ok:false,error:String(e.message||e)},400)}
       }
-if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,dbConfigured:!!env.DB});
+if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,dbConfigured:!!env.DB});
 if(url.pathname==='/api/discover-base'&&request.method==='POST'){try{return json(await discoverBase(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery base'},500)}}
 if(url.pathname==='/api/contact-enrich'&&request.method==='POST'){try{return json(await enrichContactBatch(await request.json(),env))}catch(e){return json({error:e.message||'Errore contact enrich'},500)}}
 if(url.pathname==='/api/discover'&&request.method==='POST'){try{return json(await discover(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery'},500)}}if(url.pathname==='/api/curator'&&request.method==='POST'){try{return json(await discoverCurator(await request.json(),env))}catch(e){return json({error:e.message||'Errore curator discovery'},500)}}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(HTML,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});return new Response('Not Found',{status:404})}};
