@@ -4,7 +4,7 @@ Cloudflare Worker for playlist discovery and public curator/contact discovery.
 
 ## Current version
 RADAR v0.3.8 Cloud
-
+GitHub + Cloudflare auto-deploy enabled.
 ## Endpoints
 - `GET /api/health`
 - `POST /api/discover`
