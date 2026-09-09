@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.4 Cloud';
+const VERSION = 'RADAR v0.4.5 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 
@@ -56,10 +56,20 @@ const HTML = `<!doctype html>
 .card{padding:14px}.cardMain{grid-template-columns:96px minmax(0,1fr);gap:14px}.playlistCoverWrap,.playlistCover{width:96px;height:96px}.playlistMeta{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}.metaPill{font-size:10px;color:#aeb7d7;border:1px solid #263052;background:#0b1020;border-radius:999px;padding:5px 8px}.source{display:none!important}.badge{font-size:8px;padding:5px 7px;opacity:.78}.contactPanel{margin-top:11px;padding:9px}.contactHead{margin-bottom:7px}.contactList{display:flex;gap:7px;flex-wrap:wrap}.contactItem{min-width:0;flex:0 1 auto;padding:0;border:0;background:transparent}.contactMeta{display:none}.contactAction,.selectContact{height:34px;border-radius:10px}.contactAction{display:inline-flex;align-items:center;padding:0 10px;font-size:10px}.contactAction.pending{opacity:.55;pointer-events:none}.contactAction.invalid{display:none}.verifiedDot{font-size:8px;color:var(--green);margin-left:5px}.cardActions{display:inline-flex;margin-top:9px}.linkbtn{opacity:.72}.playlistInfo .top{align-items:flex-start}
 @media(max-width:560px){.heroTools{gap:5px}.dateClock{font-size:9px;padding:7px}.cardMain{grid-template-columns:82px minmax(0,1fr);gap:11px}.playlistCoverWrap,.playlistCover{width:82px;height:82px}.title{font-size:16px}.badge{display:none}.contactPanel{margin-top:9px}.contactList{gap:6px}}
 
+
+/* v0.4.5 Visual Polish */
+.brand h1{font-family:"Arial Black","Helvetica Neue",Arial,sans-serif;font-weight:900;letter-spacing:.105em;line-height:.9;font-size:29px;transform:scaleX(1.04);transform-origin:left center}
+.brand .sub{margin-top:8px;letter-spacing:.18em}
+.dateClock{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:84px;line-height:1.15;padding:6px 8px}
+.dateClock .clockDate{font-size:8px;letter-spacing:.09em;color:#8893b8;font-weight:900}
+.dateClock .clockTime{font-size:11px;color:#c8d0ea;font-weight:800;margin-top:3px}
+.spotifyIcon{width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-right:5px}
+@media(max-width:560px){.brand h1{font-size:27px}.dateClock{min-width:76px;padding:6px}.dateClock .clockDate{font-size:7px}.dateClock .clockTime{font-size:10px}}
+
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.4</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.5</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -104,6 +114,19 @@ function badgeClass(label){return label==='Strong Match'?'':label==='Worth Check
 let selectedOutreach=new Map();
 function keyFor(r){return String(r.email||'').toLowerCase()}
 
+function cleanPlaylistName(raw){
+  let s=String(raw||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+  s=s.replace(/\s*[\|\u2022]\s*(Soundplate(?:\.com)?|Spotify|SubmitHub|Groover|Daily Playlists).*$/i,'');
+  s=s.replace(/\s*[-:]\s*Spotify Playlist.*$/i,'');
+  s=s.replace(/\s*\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission)\].*$/i,'');
+  s=s.replace(/\s*\((?:Submit Music Here|Submit(?: Your)? Music)\).*$/i,'');
+  s=s.replace(/\s*[\|\u2022]\s*$/,'').trim();
+  return s||String(raw||'');
+}
+function spotifySvg(){
+  return '<svg class="spotifyIcon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1ED760"/><path d="M17.7 16.5a.75.75 0 0 1-1.03.25c-2.82-1.72-6.37-2.11-10.55-1.16a.75.75 0 1 1-.33-1.46c4.57-1.04 8.5-.59 11.66 1.34.35.22.46.68.25 1.03Zm1.47-3.27a.94.94 0 0 1-1.29.31c-3.23-1.98-8.15-2.55-11.96-1.4a.94.94 0 1 1-.54-1.8c4.36-1.31 9.78-.67 13.48 1.59.44.27.58.85.31 1.29Zm.13-3.4C15.43 7.53 9.04 7.32 5.35 8.44a1.12 1.12 0 1 1-.65-2.15c4.24-1.28 11.3-1.03 15.75 1.61a1.12 1.12 0 0 1-1.15 1.93Z" fill="#07120b"/></svg>';
+}
+
 function parsePlaylistMeta(r){
   const s=String((r.snippet||'')+' '+(r.sourceTitle||''));
   const out=[];
@@ -126,7 +149,7 @@ function updateClock(){
   const now=new Date();
   const d=new Intl.DateTimeFormat(locale,{day:'2-digit',month:'short',year:'numeric'}).format(now).replace(/\./g,'').toUpperCase();
   const tm=new Intl.DateTimeFormat(locale,{hour:'2-digit',minute:'2-digit',hour12:false}).format(now);
-  if($('#dateClock'))$('#dateClock').textContent=d+' · '+tm;
+  if($('#dateClock'))$('#dateClock').innerHTML='<span class="clockDate">'+esc(d)+'</span><span class="clockTime">'+esc(tm)+'</span>';
 }
 
 function contactCard(label,value,action,href,r){
@@ -146,7 +169,8 @@ function visibleContacts(r){
   rows.push(contactCard(t('submission'),r.submission,'submission',r.submission,r));
   rows.push(contactCard(t('site'),r.site,'site',r.site,r));
   const html=rows.filter(Boolean).join('');
-  return '<div class="contactPanel"><div class="contactHead">● '+t('publicContacts')+'</div><div class="contactList">'+(html||'<div class="noContacts">'+t('noPublicContacts')+'</div>')+'</div></div>';
+  if(!html)return '';
+  return '<div class="contactPanel"><div class="contactHead">● '+t('publicContacts')+'</div><div class="contactList">'+html+'</div></div>';
 }
 let radarResults=[];
 const activeFilters=new Set();
@@ -179,7 +203,17 @@ async function verifyVisibleLinks(){
     nodes.forEach((n,i)=>{
       const v=byId.get(String(i));
       n.classList.remove('pending');
-      if(!v||!v.ok){n.classList.add('invalid');return}
+      if(!v||!v.ok){
+        n.classList.add('invalid');
+        const panel=n.closest('.contactPanel');
+        if(panel){
+          setTimeout(()=>{
+            const usable=[...panel.querySelectorAll('.contactAction')].some(a=>!a.classList.contains('invalid')&&!a.classList.contains('pending'));
+            if(!usable)panel.remove();
+          },0);
+        }
+        return
+      }
       if(v.finalUrl)n.href=v.finalUrl;
       const dot=n.querySelector('.verifiedDot');if(dot)dot.style.display='inline';
       n.title=t('verifiedLink');
@@ -209,7 +243,7 @@ async function loadPlaylistCovers(items){
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(r.name)+'</div>'+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+t('spotify')+'</a></div></div></div></div></article>').join('');
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(cleanPlaylistName(r.name))+'</div>'+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
   loadPlaylistCovers(items); verifyVisibleLinks();
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
