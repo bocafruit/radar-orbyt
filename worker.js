@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.3.9 Cloud';
+const VERSION = 'RADAR v0.4.0A Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 
 const HTML = `<!doctype html>
@@ -13,7 +13,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub">ORBYT Playlist Intelligence</div></div></div><div class="version">v0.3.9 · Curator Intelligence</div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub">ORBYT Playlist Intelligence</div></div></div><div class="version">v0.4.0A · Database Foundation</div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label>Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -145,4 +145,156 @@ async function discoverCurator(input,env){
   }
 }
 
-export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY});if(url.pathname==='/api/discover'&&request.method==='POST'){try{return json(await discover(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery'},500)}}if(url.pathname==='/api/curator'&&request.method==='POST'){try{return json(await discoverCurator(await request.json(),env))}catch(e){return json({error:e.message||'Errore curator discovery'},500)}}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(HTML,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});return new Response('Not Found',{status:404})}};
+async function dbHealth(env){
+  if(!env.DB)return{ok:false,configured:false,error:'Binding DB non disponibile'};
+  try{
+    const row=await env.DB.prepare("SELECT COUNT(*) AS total FROM campaigns").first();
+    return{ok:true,configured:true,campaigns:Number(row?.total||0)};
+  }catch(e){
+    return{ok:false,configured:true,error:String(e?.message||e)};
+  }
+}
+
+async function listCampaigns(env){
+  if(!env.DB)throw new Error('Database DB non collegato');
+  const q=await env.DB.prepare(`
+    SELECT c.*,
+      (SELECT COUNT(*) FROM campaign_playlists p WHERE p.campaign_id=c.id) AS playlist_count
+    FROM campaigns c
+    ORDER BY c.created_at DESC, c.id DESC
+  `).all();
+  return q.results||[];
+}
+
+async function createCampaign(input,env){
+  if(!env.DB)throw new Error('Database DB non collegato');
+  const name=String(input.name||'').trim();
+  if(!name)throw new Error('Nome campagna obbligatorio');
+  const trackTitle=String(input.trackTitle||'').trim();
+  const genre=String(input.genre||'').trim();
+  const strategy=String(input.strategy||'balanced').trim()||'balanced';
+  const r=await env.DB.prepare(
+    `INSERT INTO campaigns (name,track_title,genre,strategy,status)
+     VALUES (?,?,?,?, 'active')`
+  ).bind(name,trackTitle,genre,strategy).run();
+  const id=Number(r.meta?.last_row_id||0);
+  if(id){
+    await env.DB.prepare(
+      `INSERT INTO campaign_history (campaign_id,playlist_id,action,details)
+       VALUES (?,NULL,'campaign_created',?)`
+    ).bind(id,'Campagna creata in RADAR').run();
+  }
+  return{id,name,trackTitle,genre,strategy,status:'active'};
+}
+
+async function listCampaignPlaylists(campaignId,env){
+  if(!env.DB)throw new Error('Database DB non collegato');
+  const id=Number(campaignId);
+  if(!id)throw new Error('Campaign ID non valido');
+  const q=await env.DB.prepare(
+    `SELECT * FROM campaign_playlists WHERE campaign_id=? ORDER BY created_at DESC,id DESC`
+  ).bind(id).all();
+  return q.results||[];
+}
+
+async function addPlaylistToCampaign(input,env){
+  if(!env.DB)throw new Error('Database DB non collegato');
+  const campaignId=Number(input.campaignId);
+  const playlistName=String(input.playlistName||'').trim();
+  if(!campaignId||!playlistName)throw new Error('campaignId e playlistName obbligatori');
+  const spotifyUrl=String(input.spotifyUrl||'').trim();
+  const curatorName=String(input.curatorName||'').trim();
+  const email=String(input.email||'').trim();
+  const instagram=String(input.instagram||'').trim();
+  const submissionUrl=String(input.submissionUrl||'').trim();
+  const radarScore=Number.isFinite(Number(input.radarScore))?Number(input.radarScore):null;
+  const curatorMatch=Number.isFinite(Number(input.curatorMatch))?Number(input.curatorMatch):null;
+  const r=await env.DB.prepare(
+    `INSERT INTO campaign_playlists
+      (campaign_id,playlist_name,spotify_url,curator_name,email,instagram,submission_url,radar_score,curator_match,contact_status)
+     VALUES (?,?,?,?,?,?,?,?,?,'Da contattare')`
+  ).bind(campaignId,playlistName,spotifyUrl,curatorName,email,instagram,submissionUrl,radarScore,curatorMatch).run();
+  const playlistId=Number(r.meta?.last_row_id||0);
+  await env.DB.prepare(
+    `INSERT INTO campaign_history (campaign_id,playlist_id,action,details)
+     VALUES (?,?,'playlist_added',?)`
+  ).bind(campaignId,playlistId,'Playlist aggiunta alla campagna').run();
+  return{id:playlistId,campaignId,playlistName,contactStatus:'Da contattare'};
+}
+
+async function updateCampaignPlaylist(input,env){
+  if(!env.DB)throw new Error('Database DB non collegato');
+  const id=Number(input.id);
+  if(!id)throw new Error('Playlist ID non valido');
+  const allowed=['Da contattare','Inviata','Risposto','Accettata','Rifiutata','Follow-up'];
+  const status=allowed.includes(String(input.contactStatus||''))?String(input.contactStatus):null;
+  const notes=input.notes===undefined?null:String(input.notes||'');
+  const existing=await env.DB.prepare(`SELECT * FROM campaign_playlists WHERE id=?`).bind(id).first();
+  if(!existing)throw new Error('Playlist campagna non trovata');
+  const nextStatus=status||existing.contact_status;
+  const nextNotes=notes===null?existing.notes:notes;
+  const lastContact=['Inviata','Risposto','Accettata','Rifiutata','Follow-up'].includes(nextStatus)
+    ? new Date().toISOString()
+    : existing.last_contact_at;
+  await env.DB.prepare(
+    `UPDATE campaign_playlists
+     SET contact_status=?,notes=?,last_contact_at=?,updated_at=CURRENT_TIMESTAMP
+     WHERE id=?`
+  ).bind(nextStatus,nextNotes,lastContact,id).run();
+  if(nextStatus!==existing.contact_status){
+    await env.DB.prepare(
+      `INSERT INTO campaign_history (campaign_id,playlist_id,action,details)
+       VALUES (?,?,'status_changed',?)`
+    ).bind(existing.campaign_id,id,String(existing.contact_status||'')+' → '+nextStatus).run();
+  }
+  return{ok:true,id,contactStatus:nextStatus,notes:nextNotes,lastContactAt:lastContact};
+}
+
+async function campaignHistory(campaignId,env){
+  if(!env.DB)throw new Error('Database DB non collegato');
+  const id=Number(campaignId);
+  if(!id)throw new Error('Campaign ID non valido');
+  const q=await env.DB.prepare(
+    `SELECT h.*,p.playlist_name
+     FROM campaign_history h
+     LEFT JOIN campaign_playlists p ON p.id=h.playlist_id
+     WHERE h.campaign_id=?
+     ORDER BY h.created_at DESC,h.id DESC`
+  ).bind(id).all();
+  return q.results||[];
+}
+
+export default {async fetch(request,env){const url=new URL(request.url);
+      if(url.pathname==='/api/db-health' && request.method==='GET')return json(await dbHealth(env));
+
+      if(url.pathname==='/api/campaigns' && request.method==='GET'){
+        try{return json({ok:true,campaigns:await listCampaigns(env)})}
+        catch(e){return json({ok:false,error:String(e.message||e)},500)}
+      }
+      if(url.pathname==='/api/campaigns' && request.method==='POST'){
+        try{return json({ok:true,campaign:await createCampaign(await request.json(),env)},201)}
+        catch(e){return json({ok:false,error:String(e.message||e)},400)}
+      }
+
+      const playlistListMatch=url.pathname.match(/^\/api\/campaigns\/(\d+)\/playlists$/);
+      if(playlistListMatch && request.method==='GET'){
+        try{return json({ok:true,playlists:await listCampaignPlaylists(playlistListMatch[1],env)})}
+        catch(e){return json({ok:false,error:String(e.message||e)},400)}
+      }
+
+      const historyMatch=url.pathname.match(/^\/api\/campaigns\/(\d+)\/history$/);
+      if(historyMatch && request.method==='GET'){
+        try{return json({ok:true,history:await campaignHistory(historyMatch[1],env)})}
+        catch(e){return json({ok:false,error:String(e.message||e)},400)}
+      }
+
+      if(url.pathname==='/api/campaign-playlists' && request.method==='POST'){
+        try{return json({ok:true,playlist:await addPlaylistToCampaign(await request.json(),env)},201)}
+        catch(e){return json({ok:false,error:String(e.message||e)},400)}
+      }
+
+      if(url.pathname==='/api/campaign-playlists' && request.method==='PATCH'){
+        try{return json(await updateCampaignPlaylist(await request.json(),env))}
+        catch(e){return json({ok:false,error:String(e.message||e)},400)}
+      }
+if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,dbConfigured:!!env.DB});if(url.pathname==='/api/discover'&&request.method==='POST'){try{return json(await discover(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery'},500)}}if(url.pathname==='/api/curator'&&request.method==='POST'){try{return json(await discoverCurator(await request.json(),env))}catch(e){return json({error:e.message||'Errore curator discovery'},500)}}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(HTML,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});return new Response('Not Found',{status:404})}};
