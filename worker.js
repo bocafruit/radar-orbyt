@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.3 Cloud';
+const VERSION = 'RADAR v0.4.4 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 
@@ -50,10 +50,16 @@ const HTML = `<!doctype html>
 .playlistInfo{min-width:0}
 @media(max-width:560px){.cardMain{grid-template-columns:72px minmax(0,1fr);gap:11px}.playlistCoverWrap,.playlistCover{width:72px;height:72px;border-radius:12px}.playlistCoverFallback{border-radius:12px}}
 
+
+/* v0.4.4 Premium Compact Cards + verified links */
+.dateClock{font-size:10px;font-weight:800;letter-spacing:.06em;color:#aeb7d7;border:1px solid #252e50;background:#0b0f1e;border-radius:10px;padding:7px 9px;white-space:nowrap}
+.card{padding:14px}.cardMain{grid-template-columns:96px minmax(0,1fr);gap:14px}.playlistCoverWrap,.playlistCover{width:96px;height:96px}.playlistMeta{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}.metaPill{font-size:10px;color:#aeb7d7;border:1px solid #263052;background:#0b1020;border-radius:999px;padding:5px 8px}.source{display:none!important}.badge{font-size:8px;padding:5px 7px;opacity:.78}.contactPanel{margin-top:11px;padding:9px}.contactHead{margin-bottom:7px}.contactList{display:flex;gap:7px;flex-wrap:wrap}.contactItem{min-width:0;flex:0 1 auto;padding:0;border:0;background:transparent}.contactMeta{display:none}.contactAction,.selectContact{height:34px;border-radius:10px}.contactAction{display:inline-flex;align-items:center;padding:0 10px;font-size:10px}.contactAction.pending{opacity:.55;pointer-events:none}.contactAction.invalid{display:none}.verifiedDot{font-size:8px;color:var(--green);margin-left:5px}.cardActions{display:inline-flex;margin-top:9px}.linkbtn{opacity:.72}.playlistInfo .top{align-items:flex-start}
+@media(max-width:560px){.heroTools{gap:5px}.dateClock{font-size:9px;padding:7px}.cardMain{grid-template-columns:82px minmax(0,1fr);gap:11px}.playlistCoverWrap,.playlistCover{width:82px;height:82px}.title{font-size:16px}.badge{display:none}.contactPanel{margin-top:9px}.contactList{gap:6px}}
+
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.3</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.4</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -97,25 +103,48 @@ function badgeText(label){
 function badgeClass(label){return label==='Strong Match'?'':label==='Worth Checking'?'mid':'weak'}
 let selectedOutreach=new Map();
 function keyFor(r){return String(r.email||'').toLowerCase()}
+
+function parsePlaylistMeta(r){
+  const s=String((r.snippet||'')+' '+(r.sourceTitle||''));
+  const out=[];
+  const fol=s.match(/(\d+(?:[.,]\d+)?\s*[KMB]?)\s*(?:followers?|follower)/i);
+  const sav=s.match(/(\d+(?:[.,]\d+)?\s*[KMB]?)\s*(?:saves?|saved)/i);
+  const items=s.match(/(\d+(?:[.,]\d+)?\s*[KMB]?)\s*(?:items?|tracks?|songs?|brani)/i);
+  if(fol)out.push({v:fol[1].replace(/\s+/g,''),k:'followers'});
+  else if(sav)out.push({v:sav[1].replace(/\s+/g,''),k:'saves'});
+  if(items)out.push({v:items[1].replace(/\s+/g,''),k:'tracks'});
+  return out;
+}
+function metaHtml(r){
+  const a=parsePlaylistMeta(r);
+  if(!a.length)return '';
+  return '<div class="playlistMeta">'+a.map(x=>'<span class="metaPill">'+esc(x.v)+' '+t(x.k)+'</span>').join('')+'</div>';
+}
+function updateClock(){
+  const l=$('#language')?.value||'it';
+  const locale={it:'it-IT',en:'en-GB',es:'es-ES',fr:'fr-FR'}[l]||'it-IT';
+  const now=new Date();
+  const d=new Intl.DateTimeFormat(locale,{day:'2-digit',month:'short',year:'numeric'}).format(now).replace(/\./g,'').toUpperCase();
+  const tm=new Intl.DateTimeFormat(locale,{hour:'2-digit',minute:'2-digit',hour12:false}).format(now);
+  if($('#dateClock'))$('#dateClock').textContent=d+' · '+tm;
+}
+
 function contactCard(label,value,action,href,r){
   if(!value)return '';
-  let button='';
   if(action==='email'){
     const sel=selectedOutreach.has(keyFor(r));
-    button='<div style="display:flex;gap:5px"><a class="contactAction emailOpen" href="mailto:'+encodeURIComponent(value)+'">'+t('emailOpen')+'</a><button class="selectContact '+(sel?'selected':'')+'" data-select-email="'+esc(value)+'" title="'+t('addToList')+'">'+(sel?'✓':'+')+'</button></div>';
-  }else if(action==='copy'){
-    button='<button class="contactAction copyEmail" data-email="'+esc(value)+'">'+t('copy')+'</button>';
-  }else if(href){
-    button='<a class="contactAction" target="_blank" rel="noopener" href="'+esc(href)+'">'+t('open')+'</a>';
+    return '<div class="contactItem"><a class="contactAction emailOpen" href="mailto:'+encodeURIComponent(value)+'">✉ '+t('email')+'</a><button class="selectContact '+(sel?'selected':'')+'" data-select-email="'+esc(value)+'" title="'+t('addToList')+'">'+(sel?'✓':'+')+'</button></div>';
   }
-  return '<div class="contactItem"><div class="contactMeta"><small>'+label+'</small><strong>'+esc(value)+'</strong></div>'+button+'</div>';
+  if(!href)return '';
+  const kind=action==='submission'?'submission':'site';
+  return '<div class="contactItem"><a class="contactAction pending" data-verify-kind="'+kind+'" data-verify-url="'+esc(href)+'" target="_blank" rel="noopener" href="'+esc(href)+'">'+label+' <span class="verifiedDot" style="display:none">✓</span></a></div>';
 }
 function visibleContacts(r){
   const rows=[];
   rows.push(contactCard('Email',r.email,'email','',r));
-  rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'open',r.instagram,r));
-  rows.push(contactCard('Submission',r.submission?t('submissionAvailable'):'','open',r.submission,r));
-  rows.push(contactCard(t('site'),r.site?t('curatorSite'):'','open',r.site,r));
+  rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'site',r.instagram,r));
+  rows.push(contactCard(t('submission'),r.submission,'submission',r.submission,r));
+  rows.push(contactCard(t('site'),r.site,'site',r.site,r));
   const html=rows.filter(Boolean).join('');
   return '<div class="contactPanel"><div class="contactHead">● '+t('publicContacts')+'</div><div class="contactList">'+(html||'<div class="noContacts">'+t('noPublicContacts')+'</div>')+'</div></div>';
 }
@@ -138,6 +167,28 @@ function sortedFilteredResults(){
   });
   return a;
 }
+async function verifyVisibleLinks(){
+  const nodes=[...document.querySelectorAll('[data-verify-url]')];
+  if(!nodes.length)return;
+  const entries=nodes.map((n,i)=>({id:i,url:n.dataset.verifyUrl,kind:n.dataset.verifyKind}));
+  try{
+    const res=await fetch('/api/validate-links',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entries})});
+    if(!res.ok)throw new Error('validation');
+    const data=await res.json();
+    const byId=new Map((data.results||[]).map(x=>[String(x.id),x]));
+    nodes.forEach((n,i)=>{
+      const v=byId.get(String(i));
+      n.classList.remove('pending');
+      if(!v||!v.ok){n.classList.add('invalid');return}
+      if(v.finalUrl)n.href=v.finalUrl;
+      const dot=n.querySelector('.verifiedDot');if(dot)dot.style.display='inline';
+      n.title=t('verifiedLink');
+    });
+  }catch(e){
+    nodes.forEach(n=>n.classList.remove('pending'));
+  }
+}
+
 async function loadPlaylistCovers(items){
   const imgs=[...document.querySelectorAll('.playlistCover[data-cover-index]')];
   await Promise.all(imgs.map(async img=>{
@@ -158,14 +209,14 @@ async function loadPlaylistCovers(items){
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||t('publicSignal'))+'</div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+t('openSpotify')+'</a></div></div></div></div></article>').join('');
-  loadPlaylistCovers(items);
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(r.name)+'</div>'+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+t('spotify')+'</a></div></div></div></div></article>').join('');
+  loadPlaylistCovers(items); verifyVisibleLinks();
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
 function updateOutreachBar(){
   $('#selectedCount').textContent=selectedOutreach.size;
   $('#outreachBar').classList.toggle('open',selectedOutreach.size>0);
-  renderRecipients();
+  renderRecipients();updateClock();
 }
 function toggleRecipient(email){
   const r=radarResults.find(x=>String(x.email||'').toLowerCase()===String(email||'').toLowerCase());
@@ -261,7 +312,7 @@ $('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/he
 
 const I18N={
 it:{
- subtitle:'Playlist Intelligence',genreLabel:'Genere principale',artistsLabel:'Artisti simili',modeLabel:'Modalità',strategyLabel:'Strategia',objectiveLabel:'Obiettivo',quick:'Ricerca Rapida',complete:'Analisi Completa',balanced:'Bilanciata',audience:'Audience reale',coverage:'Massima copertura',newCurators:'Nuovi curatori',scan:'Scansiona playlist',health:'Test sistema',ready:'Pronto.',resultsTitle:'Playlist contattabili',sortContactDesc:'Contattabilità ↓',sortContactAsc:'Contattabilità ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confidenza ↓',sortConfAsc:'Confidenza ↑',results:'risultati',noFilteredResults:'Nessun risultato con i filtri selezionati.',publicSignal:'Segnale web pubblico',strongMatch:'Strong Match',worthChecking:'Worth Checking',weakMatch:'Weak Match',publicContacts:'Contatti pubblici trovati',noPublicContacts:'Nessun canale pubblico verificato per questa playlist.',submissionAvailable:'Invio disponibile',site:'Sito',curatorSite:'Sito curatore',copy:'Copia',open:'Apri',emailOpen:'✉ Email',addToList:'Aggiungi alla lista',openSpotify:'Apri su Spotify',selected:'selezionati',outreachMini:'Crea un unico format e personalizzalo per ogni curatore.',prepareOutreach:'Prepara outreach',composerTitle:'Outreach Builder',composerSub:'Un template, email individuali e personalizzate.',subjectLabel:'Oggetto',messageLabel:'Messaggio',variables:'Variabili rapide',artistLabel:'Artista',trackLabel:'Brano',trackLinkLabel:'Link brano',clear:'Svuota lista',sendHint:'RADAR prepara email separate: nessun destinatario vede gli altri. In questa versione l’invio finale si apre nel client email del dispositivo; l’invio diretto batch verrà collegato a un provider email autorizzato.',remove:'Rimuovi',curatorFallback:'Curator',time:'Tempo',scanStartTitle:'Avvio scansione',scanStartMsg:'Interrogo i motori e costruisco la lista iniziale.',scanInterrupted:'Scansione interrotta',checkEngines:'Controlla lo stato dei motori e riprova',phase1:'Fase 1/3 · Cerco playlist candidate su Brave e, se serve, Google…',discoveryStatus:'Discovery playlist…',discoveryError:'Errore discovery',candidatesFound:'Candidate individuate',verifyContacts:'Ora verifico quali playlist hanno contatti pubblici realmente associati.',candidates:'candidate',discoveryComplete:'Discovery completata',playlistsFound:'playlist trovate.',scanComplete:'Scansione completata',noCandidates:'Nessuna playlist candidata trovata.',zeroCandidates:'0 candidate · controlla genere o motori di ricerca',phase2a:'Fase 2/3 · Ricerca contatti',phase2b:'Brave scandaglia per primo. Google interviene solo dove mancano contatti utili.',contactSearch:'Ricerca contatti',contactError:'Errore ricerca contatti',contactScan:'Scansione contatti',checked:'Analizzate',of:'di',usefulContacts:'Contatti utili:',finalVerification:'Verifica finale',cleanMerge:'Pulisco duplicati e associo i segnali migliori.',contactableFound:'playlist contattabili trovate.',contactable:'contattabili',error:'Errore',healthFailed:'Health check fallito',
+ subtitle:'Playlist Intelligence',email:'Email',submission:'Submission',site:'Website',spotify:'Spotify',followers:'followers',saves:'saves',tracks:'tracks',verifiedLink:'Verified link',email:'Email',submission:'Submission',site:'Sito',spotify:'Spotify',followers:'follower',saves:'salvataggi',tracks:'brani',verifiedLink:'Link verificato',genreLabel:'Genere principale',artistsLabel:'Artisti simili',modeLabel:'Modalità',strategyLabel:'Strategia',objectiveLabel:'Obiettivo',quick:'Ricerca Rapida',complete:'Analisi Completa',balanced:'Bilanciata',audience:'Audience reale',coverage:'Massima copertura',newCurators:'Nuovi curatori',scan:'Scansiona playlist',health:'Test sistema',ready:'Pronto.',resultsTitle:'Playlist contattabili',sortContactDesc:'Contattabilità ↓',sortContactAsc:'Contattabilità ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confidenza ↓',sortConfAsc:'Confidenza ↑',results:'risultati',noFilteredResults:'Nessun risultato con i filtri selezionati.',publicSignal:'Segnale web pubblico',strongMatch:'Strong Match',worthChecking:'Worth Checking',weakMatch:'Weak Match',publicContacts:'Contatti pubblici trovati',noPublicContacts:'Nessun canale pubblico verificato per questa playlist.',submissionAvailable:'Invio disponibile',site:'Sito',curatorSite:'Sito curatore',copy:'Copia',open:'Apri',emailOpen:'✉ Email',addToList:'Aggiungi alla lista',openSpotify:'Apri su Spotify',selected:'selezionati',outreachMini:'Crea un unico format e personalizzalo per ogni curatore.',prepareOutreach:'Prepara outreach',composerTitle:'Outreach Builder',composerSub:'Un template, email individuali e personalizzate.',subjectLabel:'Oggetto',messageLabel:'Messaggio',variables:'Variabili rapide',artistLabel:'Artista',trackLabel:'Brano',trackLinkLabel:'Link brano',clear:'Svuota lista',sendHint:'RADAR prepara email separate: nessun destinatario vede gli altri. In questa versione l’invio finale si apre nel client email del dispositivo; l’invio diretto batch verrà collegato a un provider email autorizzato.',remove:'Rimuovi',curatorFallback:'Curator',time:'Tempo',scanStartTitle:'Avvio scansione',scanStartMsg:'Interrogo i motori e costruisco la lista iniziale.',scanInterrupted:'Scansione interrotta',checkEngines:'Controlla lo stato dei motori e riprova',phase1:'Fase 1/3 · Cerco playlist candidate su Brave e, se serve, Google…',discoveryStatus:'Discovery playlist…',discoveryError:'Errore discovery',candidatesFound:'Candidate individuate',verifyContacts:'Ora verifico quali playlist hanno contatti pubblici realmente associati.',candidates:'candidate',discoveryComplete:'Discovery completata',playlistsFound:'playlist trovate.',scanComplete:'Scansione completata',noCandidates:'Nessuna playlist candidata trovata.',zeroCandidates:'0 candidate · controlla genere o motori di ricerca',phase2a:'Fase 2/3 · Ricerca contatti',phase2b:'Brave scandaglia per primo. Google interviene solo dove mancano contatti utili.',contactSearch:'Ricerca contatti',contactError:'Errore ricerca contatti',contactScan:'Scansione contatti',checked:'Analizzate',of:'di',usefulContacts:'Contatti utili:',finalVerification:'Verifica finale',cleanMerge:'Pulisco duplicati e associo i segnali migliori.',contactableFound:'playlist contattabili trovate.',contactable:'contattabili',error:'Errore',healthFailed:'Health check fallito',
  legal:'<strong>RADAR</strong> utilizza informazioni disponibili pubblicamente sul web per aiutare a individuare playlist e canali di contatto. I dati possono essere incompleti, non aggiornati o attribuiti in modo errato: verifica sempre le informazioni prima di utilizzarle. RADAR non è affiliato a Spotify, Google, Brave o alle piattaforme mostrate.'
 },
 en:{
@@ -269,11 +320,11 @@ en:{
  legal:'<strong>RADAR</strong> uses publicly available web information to help identify playlists and contact channels. Data may be incomplete, outdated or incorrectly attributed: always verify information before use. RADAR is not affiliated with Spotify, Google, Brave or the platforms shown.'
 },
 es:{
- subtitle:'Inteligencia de Playlists',genreLabel:'Género principal',artistsLabel:'Artistas similares',modeLabel:'Modo',strategyLabel:'Estrategia',objectiveLabel:'Objetivo',quick:'Búsqueda rápida',complete:'Análisis completo',balanced:'Equilibrada',audience:'Audiencia real',coverage:'Máxima cobertura',newCurators:'Nuevos curadores',scan:'Escanear playlists',health:'Probar sistema',ready:'Listo.',resultsTitle:'Playlists contactables',sortContactDesc:'Contactabilidad ↓',sortContactAsc:'Contactabilidad ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confianza ↓',sortConfAsc:'Confianza ↑',results:'resultados',noFilteredResults:'Ningún resultado coincide con los filtros.',publicSignal:'Señal web pública',strongMatch:'Match fuerte',worthChecking:'Vale la pena revisar',weakMatch:'Match débil',publicContacts:'Contactos públicos encontrados',noPublicContacts:'No se encontró un canal público verificado.',submissionAvailable:'Envío disponible',site:'Sitio',curatorSite:'Sitio del curador',copy:'Copiar',open:'Abrir',emailOpen:'✉ Email',addToList:'Añadir a la lista',openSpotify:'Abrir en Spotify',selected:'seleccionados',outreachMini:'Crea un solo formato y personalízalo para cada curador.',prepareOutreach:'Preparar outreach',composerTitle:'Outreach Builder',composerSub:'Una plantilla, emails individuales y personalizados.',subjectLabel:'Asunto',messageLabel:'Mensaje',variables:'Variables rápidas',artistLabel:'Artista',trackLabel:'Tema',trackLinkLabel:'Enlace del tema',clear:'Vaciar lista',sendHint:'RADAR prepara emails separados: ningún destinatario ve a los demás. En esta versión el envío final se abre en el cliente de email del dispositivo; el envío directo por lotes requerirá un proveedor autorizado.',remove:'Quitar',curatorFallback:'Curador',time:'Tiempo',scanStartTitle:'Iniciando escaneo',scanStartMsg:'Consultando motores y creando la lista inicial.',scanInterrupted:'Escaneo interrumpido',checkEngines:'Comprueba los motores e inténtalo de nuevo',phase1:'Fase 1/3 · Buscando playlists candidatas en Brave y Google cuando sea necesario…',discoveryStatus:'Buscando playlists…',discoveryError:'Error de búsqueda',candidatesFound:'Candidatas encontradas',verifyContacts:'Ahora verifico qué playlists tienen contactos públicos realmente asociados.',candidates:'candidatas',discoveryComplete:'Búsqueda completada',playlistsFound:'playlists encontradas.',scanComplete:'Escaneo completado',noCandidates:'No se encontraron playlists candidatas.',zeroCandidates:'0 candidatas · revisa género o motores',phase2a:'Fase 2/3 · Búsqueda de contactos',phase2b:'Brave busca primero. Google interviene solo cuando faltan contactos útiles.',contactSearch:'Búsqueda de contactos',contactError:'Error buscando contactos',contactScan:'Escaneo de contactos',checked:'Analizadas',of:'de',usefulContacts:'Contactos útiles:',finalVerification:'Verificación final',cleanMerge:'Eliminando duplicados y asociando las mejores señales.',contactableFound:'playlists contactables encontradas.',contactable:'contactables',error:'Error',healthFailed:'Falló la prueba del sistema',
+ subtitle:'Inteligencia de Playlists',email:'Email',submission:'Envío',site:'Sitio',spotify:'Spotify',followers:'seguidores',saves:'guardados',tracks:'temas',verifiedLink:'Enlace verificado',genreLabel:'Género principal',artistsLabel:'Artistas similares',modeLabel:'Modo',strategyLabel:'Estrategia',objectiveLabel:'Objetivo',quick:'Búsqueda rápida',complete:'Análisis completo',balanced:'Equilibrada',audience:'Audiencia real',coverage:'Máxima cobertura',newCurators:'Nuevos curadores',scan:'Escanear playlists',health:'Probar sistema',ready:'Listo.',resultsTitle:'Playlists contactables',sortContactDesc:'Contactabilidad ↓',sortContactAsc:'Contactabilidad ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confianza ↓',sortConfAsc:'Confianza ↑',results:'resultados',noFilteredResults:'Ningún resultado coincide con los filtros.',publicSignal:'Señal web pública',strongMatch:'Match fuerte',worthChecking:'Vale la pena revisar',weakMatch:'Match débil',publicContacts:'Contactos públicos encontrados',noPublicContacts:'No se encontró un canal público verificado.',submissionAvailable:'Envío disponible',site:'Sitio',curatorSite:'Sitio del curador',copy:'Copiar',open:'Abrir',emailOpen:'✉ Email',addToList:'Añadir a la lista',openSpotify:'Abrir en Spotify',selected:'seleccionados',outreachMini:'Crea un solo formato y personalízalo para cada curador.',prepareOutreach:'Preparar outreach',composerTitle:'Outreach Builder',composerSub:'Una plantilla, emails individuales y personalizados.',subjectLabel:'Asunto',messageLabel:'Mensaje',variables:'Variables rápidas',artistLabel:'Artista',trackLabel:'Tema',trackLinkLabel:'Enlace del tema',clear:'Vaciar lista',sendHint:'RADAR prepara emails separados: ningún destinatario ve a los demás. En esta versión el envío final se abre en el cliente de email del dispositivo; el envío directo por lotes requerirá un proveedor autorizado.',remove:'Quitar',curatorFallback:'Curador',time:'Tiempo',scanStartTitle:'Iniciando escaneo',scanStartMsg:'Consultando motores y creando la lista inicial.',scanInterrupted:'Escaneo interrumpido',checkEngines:'Comprueba los motores e inténtalo de nuevo',phase1:'Fase 1/3 · Buscando playlists candidatas en Brave y Google cuando sea necesario…',discoveryStatus:'Buscando playlists…',discoveryError:'Error de búsqueda',candidatesFound:'Candidatas encontradas',verifyContacts:'Ahora verifico qué playlists tienen contactos públicos realmente asociados.',candidates:'candidatas',discoveryComplete:'Búsqueda completada',playlistsFound:'playlists encontradas.',scanComplete:'Escaneo completado',noCandidates:'No se encontraron playlists candidatas.',zeroCandidates:'0 candidatas · revisa género o motores',phase2a:'Fase 2/3 · Búsqueda de contactos',phase2b:'Brave busca primero. Google interviene solo cuando faltan contactos útiles.',contactSearch:'Búsqueda de contactos',contactError:'Error buscando contactos',contactScan:'Escaneo de contactos',checked:'Analizadas',of:'de',usefulContacts:'Contactos útiles:',finalVerification:'Verificación final',cleanMerge:'Eliminando duplicados y asociando las mejores señales.',contactableFound:'playlists contactables encontradas.',contactable:'contactables',error:'Error',healthFailed:'Falló la prueba del sistema',
  legal:'<strong>RADAR</strong> utiliza información disponible públicamente en la web para ayudar a identificar playlists y canales de contacto. Los datos pueden estar incompletos, desactualizados o atribuidos incorrectamente: verifica siempre la información antes de usarla. RADAR no está afiliado con Spotify, Google, Brave ni con las plataformas mostradas.'
 },
 fr:{
- subtitle:'Intelligence Playlists',genreLabel:'Genre principal',artistsLabel:'Artistes similaires',modeLabel:'Mode',strategyLabel:'Stratégie',objectiveLabel:'Objectif',quick:'Recherche rapide',complete:'Analyse complète',balanced:'Équilibrée',audience:'Audience réelle',coverage:'Couverture maximale',newCurators:'Nouveaux curateurs',scan:'Scanner les playlists',health:'Tester le système',ready:'Prêt.',resultsTitle:'Playlists contactables',sortContactDesc:'Contactabilité ↓',sortContactAsc:'Contactabilité ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confiance ↓',sortConfAsc:'Confiance ↑',results:'résultats',noFilteredResults:'Aucun résultat avec les filtres sélectionnés.',publicSignal:'Signal web public',strongMatch:'Match fort',worthChecking:'À vérifier',weakMatch:'Match faible',publicContacts:'Contacts publics trouvés',noPublicContacts:'Aucun canal public vérifié trouvé pour cette playlist.',submissionAvailable:'Soumission disponible',site:'Site',curatorSite:'Site du curateur',copy:'Copier',open:'Ouvrir',emailOpen:'✉ Email',addToList:'Ajouter à la liste',openSpotify:'Ouvrir sur Spotify',selected:'sélectionnés',outreachMini:'Créez un seul modèle et personnalisez-le pour chaque curateur.',prepareOutreach:'Préparer l’outreach',composerTitle:'Outreach Builder',composerSub:'Un modèle, des emails séparés et personnalisés.',subjectLabel:'Objet',messageLabel:'Message',variables:'Variables rapides',artistLabel:'Artiste',trackLabel:'Titre',trackLinkLabel:'Lien du titre',clear:'Vider la liste',sendHint:'RADAR prépare des emails séparés : aucun destinataire ne voit les autres. Dans cette version, l’envoi final s’ouvre dans le client email de l’appareil ; l’envoi direct en lot nécessitera un fournisseur email autorisé.',remove:'Retirer',curatorFallback:'Curateur',time:'Temps',scanStartTitle:'Démarrage du scan',scanStartMsg:'Interrogation des moteurs et création de la liste initiale.',scanInterrupted:'Scan interrompu',checkEngines:'Vérifiez les moteurs et réessayez',phase1:'Phase 1/3 · Recherche de playlists candidates sur Brave et Google si nécessaire…',discoveryStatus:'Recherche de playlists…',discoveryError:'Erreur de recherche',candidatesFound:'Candidates trouvées',verifyContacts:'Je vérifie maintenant quelles playlists ont des contacts publics réellement associés.',candidates:'candidates',discoveryComplete:'Recherche terminée',playlistsFound:'playlists trouvées.',scanComplete:'Scan terminé',noCandidates:'Aucune playlist candidate trouvée.',zeroCandidates:'0 candidate · vérifiez le genre ou les moteurs',phase2a:'Phase 2/3 · Recherche de contacts',phase2b:'Brave analyse en premier. Google intervient seulement si des contacts utiles manquent.',contactSearch:'Recherche de contacts',contactError:'Erreur de recherche de contacts',contactScan:'Scan des contacts',checked:'Analysées',of:'sur',usefulContacts:'Contacts utiles :',finalVerification:'Vérification finale',cleanMerge:'Suppression des doublons et association des meilleurs signaux.',contactableFound:'playlists contactables trouvées.',contactable:'contactables',error:'Erreur',healthFailed:'Échec du test système',
+ subtitle:'Intelligence Playlists',email:'Email',submission:'Soumission',site:'Site',spotify:'Spotify',followers:'abonnés',saves:'sauvegardes',tracks:'titres',verifiedLink:'Lien vérifié',genreLabel:'Genre principal',artistsLabel:'Artistes similaires',modeLabel:'Mode',strategyLabel:'Stratégie',objectiveLabel:'Objectif',quick:'Recherche rapide',complete:'Analyse complète',balanced:'Équilibrée',audience:'Audience réelle',coverage:'Couverture maximale',newCurators:'Nouveaux curateurs',scan:'Scanner les playlists',health:'Tester le système',ready:'Prêt.',resultsTitle:'Playlists contactables',sortContactDesc:'Contactabilité ↓',sortContactAsc:'Contactabilité ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confiance ↓',sortConfAsc:'Confiance ↑',results:'résultats',noFilteredResults:'Aucun résultat avec les filtres sélectionnés.',publicSignal:'Signal web public',strongMatch:'Match fort',worthChecking:'À vérifier',weakMatch:'Match faible',publicContacts:'Contacts publics trouvés',noPublicContacts:'Aucun canal public vérifié trouvé pour cette playlist.',submissionAvailable:'Soumission disponible',site:'Site',curatorSite:'Site du curateur',copy:'Copier',open:'Ouvrir',emailOpen:'✉ Email',addToList:'Ajouter à la liste',openSpotify:'Ouvrir sur Spotify',selected:'sélectionnés',outreachMini:'Créez un seul modèle et personnalisez-le pour chaque curateur.',prepareOutreach:'Préparer l’outreach',composerTitle:'Outreach Builder',composerSub:'Un modèle, des emails séparés et personnalisés.',subjectLabel:'Objet',messageLabel:'Message',variables:'Variables rapides',artistLabel:'Artiste',trackLabel:'Titre',trackLinkLabel:'Lien du titre',clear:'Vider la liste',sendHint:'RADAR prépare des emails séparés : aucun destinataire ne voit les autres. Dans cette version, l’envoi final s’ouvre dans le client email de l’appareil ; l’envoi direct en lot nécessitera un fournisseur email autorisé.',remove:'Retirer',curatorFallback:'Curateur',time:'Temps',scanStartTitle:'Démarrage du scan',scanStartMsg:'Interrogation des moteurs et création de la liste initiale.',scanInterrupted:'Scan interrompu',checkEngines:'Vérifiez les moteurs et réessayez',phase1:'Phase 1/3 · Recherche de playlists candidates sur Brave et Google si nécessaire…',discoveryStatus:'Recherche de playlists…',discoveryError:'Erreur de recherche',candidatesFound:'Candidates trouvées',verifyContacts:'Je vérifie maintenant quelles playlists ont des contacts publics réellement associés.',candidates:'candidates',discoveryComplete:'Recherche terminée',playlistsFound:'playlists trouvées.',scanComplete:'Scan terminé',noCandidates:'Aucune playlist candidate trouvée.',zeroCandidates:'0 candidate · vérifiez le genre ou les moteurs',phase2a:'Phase 2/3 · Recherche de contacts',phase2b:'Brave analyse en premier. Google intervient seulement si des contacts utiles manquent.',contactSearch:'Recherche de contacts',contactError:'Erreur de recherche de contacts',contactScan:'Scan des contacts',checked:'Analysées',of:'sur',usefulContacts:'Contacts utiles :',finalVerification:'Vérification finale',cleanMerge:'Suppression des doublons et association des meilleurs signaux.',contactableFound:'playlists contactables trouvées.',contactable:'contactables',error:'Erreur',healthFailed:'Échec du test système',
  legal:'<strong>RADAR</strong> utilise des informations publiquement disponibles sur le web pour aider à identifier des playlists et des canaux de contact. Les données peuvent être incomplètes, obsolètes ou mal attribuées : vérifiez toujours les informations avant utilisation. RADAR n’est affilié ni à Spotify, ni à Google, ni à Brave, ni aux plateformes affichées.'
 }};
 function applyLanguage(){
@@ -297,7 +348,7 @@ $('#composerOverlay').addEventListener('click',e=>{if(e.target.id==='composerOve
 $('#clearSelection').addEventListener('click',()=>{selectedOutreach.clear();paintResults(sortedFilteredResults());updateOutreachBar();$('#composerOverlay').classList.remove('open')});
 document.querySelectorAll('.token').forEach(b=>b.addEventListener('click',()=>{const ta=$('#mailBody'),tok=b.dataset.token;const a=ta.selectionStart||ta.value.length,c=ta.selectionEnd||a;ta.value=ta.value.slice(0,a)+tok+ta.value.slice(c);ta.focus();ta.selectionStart=ta.selectionEnd=a+tok.length}));
 ['mailSubject','mailBody','senderArtist','senderTrack','senderTrackLink'].forEach(id=>$('#'+id)?.addEventListener('input',renderRecipients));
-applyLanguage();
+applyLanguage();updateClock();setInterval(updateClock,30000);
 
 </script></body></html>`;
 
@@ -662,6 +713,45 @@ async function campaignHistory(campaignId,env){
   return q.results||[];
 }
 
+
+function isPublicHttpUrl(raw){
+  try{
+    const u=new URL(String(raw||''));
+    if(!/^https?:$/.test(u.protocol))return null;
+    const h=u.hostname.toLowerCase();
+    if(h==='localhost'||h.endsWith('.local')||h==='0.0.0.0'||h==='127.0.0.1'||h==='::1')return null;
+    if(/^10\./.test(h)||/^192\.168\./.test(h)||/^169\.254\./.test(h))return null;
+    const m=h.match(/^172\.(\d+)\./); if(m&&Number(m[1])>=16&&Number(m[1])<=31)return null;
+    return u;
+  }catch(e){return null}
+}
+function looksLikeSubmission(u){
+  const s=(u.hostname+u.pathname+u.search).toLowerCase();
+  const known=['soundplate.com','submithub.com','groover.co','dailyplaylists.com','playlistpush.com','musosoup.com','for-the-love-of-bands.com'];
+  return known.some(d=>u.hostname===d||u.hostname.endsWith('.'+d)) || /(submit|submission|pitch|send[-_]?music|demo|playlist[-_]?submission|music[-_]?submission|apply)/i.test(s);
+}
+async function validateOneLink(entry){
+  const u=isPublicHttpUrl(entry.url);
+  if(!u)return {id:entry.id,ok:false};
+  if(entry.kind==='submission'&&!looksLikeSubmission(u))return {id:entry.id,ok:false};
+  try{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),4500);
+    const r=await fetch(u.toString(),{method:'GET',redirect:'follow',signal:controller.signal,headers:{'user-agent':'RADAR-LinkVerifier/1.0'}});
+    clearTimeout(timer);
+    const finalUrl=r.url||u.toString();
+    const fu=isPublicHttpUrl(finalUrl);
+    if(!fu||r.status>=400)return {id:entry.id,ok:false};
+    if(entry.kind==='submission'&&!looksLikeSubmission(fu))return {id:entry.id,ok:false};
+    return {id:entry.id,ok:true,finalUrl:fu.toString(),status:r.status};
+  }catch(e){return {id:entry.id,ok:false}}
+}
+async function validateLinks(input){
+  const entries=Array.isArray(input?.entries)?input.entries.slice(0,40):[];
+  const results=await Promise.all(entries.map(validateOneLink));
+  return {results};
+}
+
 export default {async fetch(request,env){const url=new URL(request.url);
       if(url.pathname==='/api/db-health' && request.method==='GET')return json(await dbHealth(env));
 
@@ -695,6 +785,7 @@ export default {async fetch(request,env){const url=new URL(request.url);
         try{return json(await updateCampaignPlaylist(await request.json(),env))}
         catch(e){return json({ok:false,error:String(e.message||e)},400)}
       }
+if(url.pathname==='/api/validate-links'&&request.method==='POST'){try{return json(await validateLinks(await request.json()))}catch(e){return json({error:'Link validation failed'},500)}}
 if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,dbConfigured:!!env.DB});
 if(url.pathname==='/api/discover-base'&&request.method==='POST'){try{return json(await discoverBase(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery base'},500)}}
 if(url.pathname==='/api/contact-enrich'&&request.method==='POST'){try{return json(await enrichContactBatch(await request.json(),env))}catch(e){return json({error:e.message||'Errore contact enrich'},500)}}
