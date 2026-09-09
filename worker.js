@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.2 Cloud';
+const VERSION = 'RADAR v0.4.3 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 
@@ -41,10 +41,19 @@ const HTML = `<!doctype html>
 .composeActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:15px}.sendHint{font-size:9px;color:var(--muted);margin-top:10px;line-height:1.45}
 @media(max-width:560px){.outreachBar{align-items:flex-end}.recipient{grid-template-columns:1fr}.recipientActions{justify-content:flex-start}.composer{padding:14px}}
 
+
+/* v0.4.3 Playlist Covers */
+.cardMain{display:grid;grid-template-columns:92px minmax(0,1fr);gap:13px;align-items:start}
+.playlistCover{width:92px;height:92px;border-radius:14px;object-fit:cover;border:1px solid #2b3459;background:linear-gradient(135deg,#151b31,#0a0e1c);box-shadow:0 12px 28px rgba(0,0,0,.28)}
+.playlistCoverWrap{position:relative;width:92px;height:92px;flex:0 0 auto}
+.playlistCoverFallback{position:absolute;inset:0;display:grid;place-items:center;border-radius:14px;border:1px solid #2b3459;background:radial-gradient(circle at 30% 30%,rgba(85,213,255,.12),transparent 45%),linear-gradient(135deg,#151b31,#0a0e1c);color:#66719b;font-size:22px;font-weight:900}
+.playlistInfo{min-width:0}
+@media(max-width:560px){.cardMain{grid-template-columns:72px minmax(0,1fr);gap:11px}.playlistCoverWrap,.playlistCover{width:72px;height:72px;border-radius:12px}.playlistCoverFallback{border-radius:12px}}
+
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.2</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.3</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -129,10 +138,28 @@ function sortedFilteredResults(){
   });
   return a;
 }
+async function loadPlaylistCovers(items){
+  const imgs=[...document.querySelectorAll('.playlistCover[data-cover-index]')];
+  await Promise.all(imgs.map(async img=>{
+    const i=Number(img.dataset.coverIndex),r=items[i];
+    if(!r||!r.spotifyUrl)return;
+    try{
+      const u='https://open.spotify.com/oembed?url='+encodeURIComponent(r.spotifyUrl);
+      const res=await fetch(u);
+      if(!res.ok)return;
+      const d=await res.json();
+      if(!d.thumbnail_url)return;
+      img.onload=()=>{img.style.opacity='1';const f=img.previousElementSibling;if(f)f.style.display='none'};
+      img.src=d.thumbnail_url;
+    }catch(e){}
+  }));
+}
+
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map(r=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||t('publicSignal'))+'</div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+t('openSpotify')+'</a></div></div></div></article>').join('');
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||t('publicSignal'))+'</div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+t('openSpotify')+'</a></div></div></div></div></article>').join('');
+  loadPlaylistCovers(items);
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
 function updateOutreachBar(){
