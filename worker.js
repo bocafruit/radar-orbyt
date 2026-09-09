@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.1.1 Cloud';
+const VERSION = 'RADAR v0.4.2 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 
@@ -24,23 +24,48 @@ const HTML = `<!doctype html>
 .cardBody{display:block!important}.cardMain{width:100%}.contactPanel{margin-top:12px}.legalFooter{margin-top:34px;padding:20px 4px 4px;border-top:1px solid #202744;color:#7f88aa;font-size:10px;line-height:1.55}.legalFooter strong{color:#b7bfdd}.legalLinks{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.legalLinks button{border:0;background:none;color:#9aa6d0;padding:0;font:inherit;text-decoration:underline;cursor:pointer}.legalNote{max-width:850px}
 @media(max-width:700px){.resultsHead{align-items:flex-start;gap:10px;flex-direction:column}.resultsTools{justify-content:flex-start;width:100%}.sortSelect{flex:1;min-width:150px}.heroTools{margin-left:auto}}
 
+
+/* v0.4.2 Outreach Builder */
+.selectContact{width:34px;height:34px;border-radius:10px;border:1px solid #40507d;background:#151c32;color:#fff;font-size:20px;line-height:1;font-weight:800;cursor:pointer;display:inline-grid;place-items:center}
+.selectContact.selected{background:rgba(105,240,181,.12);border-color:rgba(105,240,181,.5);color:var(--green)}
+.emailOpen{border-color:rgba(85,213,255,.36)!important;background:rgba(85,213,255,.08)!important}
+.outreachBar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%) translateY(120px);width:min(720px,calc(100% - 24px));z-index:50;padding:11px 12px;border:1px solid #39476f;border-radius:16px;background:rgba(10,14,28,.96);box-shadow:0 18px 50px rgba(0,0,0,.45),0 0 30px rgba(85,213,255,.08);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:space-between;gap:10px;transition:transform .28s ease}
+.outreachBar.open{transform:translateX(-50%) translateY(0)}
+.outreachCount{font-size:12px;font-weight:900}.outreachCount span{color:var(--green)}.outreachMini{font-size:9px;color:var(--muted);margin-top:2px}
+.composerOverlay{position:fixed;inset:0;z-index:80;background:rgba(3,5,12,.78);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:16px}
+.composerOverlay.open{display:flex}.composer{width:min(760px,100%);max-height:92vh;overflow:auto;border:1px solid #303a62;background:linear-gradient(180deg,#11162a,#080c18);border-radius:22px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+.composerHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.composerHead h3{margin:0;font-size:19px}.composerSub{font-size:11px;color:var(--muted);margin-top:5px}.closeComposer{width:34px;height:34px;border-radius:10px;border:1px solid #30385f;background:#151b31;color:#fff;font-size:19px;cursor:pointer}
+.composeGrid{display:grid;gap:10px;margin-top:15px}.composeGrid label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.5}
+.tokenRow{display:flex;gap:6px;flex-wrap:wrap}.token{border:1px solid #30385f;background:#12182c;color:#bdc7e9;border-radius:999px;padding:6px 8px;font-size:9px;cursor:pointer}
+.recipientList{display:grid;gap:7px;margin-top:12px}.recipient{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #232b4b;background:#0b1020;border-radius:11px}.recipient strong{font-size:11px;display:block}.recipient small{font-size:9px;color:var(--muted);display:block;margin-top:2px}.recipientActions{display:flex;gap:6px}.recipientRemove{border:1px solid #3d3654;background:#171225;color:#ffc0d0;border-radius:8px;padding:7px 8px;font-size:9px;cursor:pointer}
+.composeActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:15px}.sendHint{font-size:9px;color:var(--muted);margin-top:10px;line-height:1.45}
+@media(max-width:560px){.outreachBar{align-items:flex-end}.recipient{grid-template-columns:1fr}.recipientActions{justify-content:flex-start}.composer{padding:14px}}
+
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.1.1</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.2</div></div></section>
 <section class="panel">
 <div class="grid">
-<div class="field"><label>Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
-<div class="field"><label>Artisti simili</label><input id="artists" placeholder="es. Anyma, Massano" /></div>
-<div class="field"><label>Modalità</label><select id="mode"><option value="quick">Ricerca Rapida</option><option value="complete">Analisi Completa</option></select></div>
-<div class="field"><label>Strategia</label><select id="strategy"><option value="balanced">Bilanciata</option><option value="audience">Audience reale</option><option value="coverage">Massima copertura</option><option value="new">Nuovi curatori</option></select></div>
-<div class="field"><label>Obiettivo</label><select id="objective"><option value="contact" selected>Contact-First</option><option value="playlist">Playlist Discovery</option></select></div>
+<div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
+<div class="field"><label data-i18n="artistsLabel">Artisti simili</label><input id="artists" placeholder="es. Anyma, Massano" /></div>
+<div class="field"><label data-i18n="modeLabel">Modalità</label><select id="mode"><option value="quick" data-i18n="quick">Ricerca Rapida</option><option value="complete" data-i18n="complete">Analisi Completa</option></select></div>
+<div class="field"><label data-i18n="strategyLabel">Strategia</label><select id="strategy"><option value="balanced" data-i18n="balanced">Bilanciata</option><option value="audience" data-i18n="audience">Audience reale</option><option value="coverage" data-i18n="coverage">Massima copertura</option><option value="new" data-i18n="newCurators">Nuovi curatori</option></select></div>
+<div class="field"><label data-i18n="objectiveLabel">Obiettivo</label><select id="objective"><option value="contact" selected>Contact-First</option><option value="playlist">Playlist Discovery</option></select></div>
 </div>
-<div class="actions"><button class="btn" id="discover">Scansiona playlist</button><button class="btn secondary" id="health">Test sistema</button><span class="status" id="status">Pronto.</span></div>
+<div class="actions"><button class="btn" id="discover" data-i18n="scan">Scansiona playlist</button><button class="btn secondary" id="health" data-i18n="health">Test sistema</button><span class="status" id="status" data-i18n="ready">Pronto.</span></div>
 </section>
 <section class="scanPanel" id="scanPanel"><div class="scanLayout"><div class="scanRadar"><div class="scanSweep"></div><i class="scanDot d1"></i><i class="scanDot d2"></i><i class="scanDot d3"></i></div><div><div class="scanEyebrow"><span class="scanPulse"></span>Scansione in corso</div><div class="scanTitle" id="scanTitle">Inizializzazione RADAR…</div><div class="scanMessage" id="scanMessage">Preparo i motori di ricerca e i criteri di contatto.</div><div class="progressRow"><div class="progressTrack"><div class="progressFill" id="scanProgress"></div></div><div class="progressPct" id="scanPct">4%</div></div><div class="scanStats"><div class="scanStat"><b id="statCandidates">0</b><span>Candidate</span></div><div class="scanStat"><b id="statChecked">0</b><span>Analizzate</span></div><div class="scanStat"><b id="statContacts">0</b><span>Contatti</span></div><div class="scanStat"><b id="statGoogle">0</b><span>Google fallback</span></div></div><div class="scanFooter"><span id="scanEngine">Brave → Google fallback → RADAR</span><span id="scanTimer">Tempo 0s</span></div></div></div></section>
-<div class="resultsHead"><div><h2 id="resultsTitle">Playlist contattabili</h2><span class="count" id="count">0 risultati</span></div><div class="resultsTools"><select id="sortResults" class="sortSelect"><option value="contact-desc">Contattabilità ↓</option><option value="contact-asc">Contattabilità ↑</option><option value="match-desc">Match ↓</option><option value="match-asc">Match ↑</option><option value="confidence-desc">Confidenza ↓</option><option value="confidence-asc">Confidenza ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select><button class="filterChip" data-filter="email">Email</button><button class="filterChip" data-filter="instagram">Instagram</button><button class="filterChip" data-filter="submission">Submission</button></div></div>
+<div class="resultsHead"><div><h2 id="resultsTitle" data-i18n="resultsTitle">Playlist contattabili</h2><span class="count" id="count">0 risultati</span></div><div class="resultsTools"><select id="sortResults" class="sortSelect"><option value="contact-desc" data-i18n="sortContactDesc">Contattabilità ↓</option><option value="contact-asc" data-i18n="sortContactAsc">Contattabilità ↑</option><option value="match-desc" data-i18n="sortMatchDesc">Match ↓</option><option value="match-asc" data-i18n="sortMatchAsc">Match ↑</option><option value="confidence-desc" data-i18n="sortConfDesc">Confidenza ↓</option><option value="confidence-asc" data-i18n="sortConfAsc">Confidenza ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select><button class="filterChip" data-filter="email">Email</button><button class="filterChip" data-filter="instagram">Instagram</button><button class="filterChip" data-filter="submission">Submission</button></div></div>
 <div id="results" class="cards"><div class="empty">Imposta il genere e avvia RADAR. Contact-First mostra prima le playlist con almeno un canale pubblico utile: email, Instagram o submission.</div></div>
+<div class="outreachBar" id="outreachBar"><div><div class="outreachCount"><span id="selectedCount">0</span> <span data-i18n="selected">selezionati</span></div><div class="outreachMini" data-i18n="outreachMini">Crea un unico format e personalizzalo per ogni curatore.</div></div><button class="btn" id="openComposer" data-i18n="prepareOutreach">Prepara outreach</button></div>
+<div class="composerOverlay" id="composerOverlay"><section class="composer"><div class="composerHead"><div><h3 data-i18n="composerTitle">Outreach Builder</h3><div class="composerSub" data-i18n="composerSub">Un template, email individuali e personalizzate.</div></div><button class="closeComposer" id="closeComposer">×</button></div><div class="composeGrid"><div><label data-i18n="subjectLabel">Oggetto</label><input id="mailSubject" value="Music submission for {{playlist}}" /></div><div><label data-i18n="messageLabel">Messaggio</label><textarea id="mailBody">Hi {{curator}},
+
+I’m {{artist}} and I’d love to submit my track {{track}} for consideration on {{playlist}}.
+
+Listen here: {{spotify_link}}
+
+Thank you for your time.</textarea></div><div><label data-i18n="variables">Variabili rapide</label><div class="tokenRow"><button class="token" data-token="{{curator}}">{{curator}}</button><button class="token" data-token="{{playlist}}">{{playlist}}</button><button class="token" data-token="{{artist}}">{{artist}}</button><button class="token" data-token="{{track}}">{{track}}</button><button class="token" data-token="{{spotify_link}}">{{spotify_link}}</button></div></div><div><label data-i18n="artistLabel">Artista</label><input id="senderArtist" value="ORBYT" /></div><div><label data-i18n="trackLabel">Brano</label><input id="senderTrack" placeholder="es. EUPHORIA" /></div><div><label data-i18n="trackLinkLabel">Link brano</label><input id="senderTrackLink" placeholder="https://open.spotify.com/track/..." /></div></div><div class="recipientList" id="recipientList"></div><div class="composeActions"><button class="btn secondary" id="clearSelection" data-i18n="clear">Svuota lista</button></div><div class="sendHint" data-i18n="sendHint">RADAR prepara email separate: nessun destinatario vede gli altri. In questa versione l’invio finale si apre nel client email del dispositivo; l’invio diretto batch verrà collegato a un provider email autorizzato.</div></section></div>
 <footer class="legalFooter"><div class="legalNote" id="legalText"><strong>RADAR</strong> utilizza informazioni disponibili pubblicamente sul web per aiutare a individuare playlist e canali di contatto. I dati possono essere incompleti, non aggiornati o attribuiti in modo errato: verifica sempre le informazioni prima di utilizzarle. RADAR non è affiliato a Spotify, Google, Brave o alle piattaforme mostrate.</div><div class="legalLinks"><button type="button">Privacy</button><button type="button">Terms</button><button type="button">Data Sources</button><button type="button">Contact / Removal Request</button></div></footer>
 </main>
 <script>
@@ -50,8 +75,41 @@ function metric(label,val){return '<div class="metric"><b>'+esc(val)+'</b><span>
 function badgeClass(label){return label==='Strong Match'?'':label==='Worth Checking'?'mid':'weak'}
 function contactSummary(r){const bits=[];if(r.email)bits.push('Email ✓');if(r.instagram)bits.push('Instagram ✓');if(r.submission)bits.push('Submission ✓');if(r.site)bits.push('Sito ✓');return bits.length?bits.join(' · '):'Contatto non ancora verificato'}
 function scoreMini(label,val){const n=Math.max(0,Math.min(100,Number(val)||0));return '<div><div class="scoreMini"><span>'+label+'</span><b>'+esc(n)+'</b></div><div class="scoreBar"><i style="width:'+n+'%"></i></div></div>'}
-function contactCard(label,value,action,href){if(!value)return '';const button=action==='copy'?'<button class="contactAction copyEmail" data-email="'+esc(value)+'">Copia</button>':href?'<a class="contactAction" target="_blank" rel="noopener" href="'+esc(href)+'">Apri</a>':'';return '<div class="contactItem"><div class="contactMeta"><small>'+label+'</small><strong>'+esc(value)+'</strong></div>'+button+'</div>'}
-function visibleContacts(r){const rows=[];rows.push(contactCard('Email',r.email,'copy',''));rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'open',r.instagram));rows.push(contactCard('Submission',r.submission?'Invio disponibile':'','open',r.submission));rows.push(contactCard('Sito',r.site?'Sito curatore':'','open',r.site));const html=rows.filter(Boolean).join('');return '<div class="contactPanel"><div class="contactHead">● Contatti pubblici trovati</div><div class="contactList">'+(html||'<div class="noContacts">Nessun canale pubblico verificato per questa playlist.</div>')+'</div></div>'}
+function t(k){
+  const l=$('#language')?.value||'it';
+  return (I18N[l]&&I18N[l][k]) || (I18N.it&&I18N.it[k]) || k;
+}
+function badgeText(label){
+  if(label==='Strong Match')return t('strongMatch');
+  if(label==='Worth Checking')return t('worthChecking');
+  if(label==='Weak Match')return t('weakMatch');
+  return label||'';
+}
+function badgeClass(label){return label==='Strong Match'?'':label==='Worth Checking'?'mid':'weak'}
+let selectedOutreach=new Map();
+function keyFor(r){return String(r.email||'').toLowerCase()}
+function contactCard(label,value,action,href,r){
+  if(!value)return '';
+  let button='';
+  if(action==='email'){
+    const sel=selectedOutreach.has(keyFor(r));
+    button='<div style="display:flex;gap:5px"><a class="contactAction emailOpen" href="mailto:'+encodeURIComponent(value)+'">'+t('emailOpen')+'</a><button class="selectContact '+(sel?'selected':'')+'" data-select-email="'+esc(value)+'" title="'+t('addToList')+'">'+(sel?'✓':'+')+'</button></div>';
+  }else if(action==='copy'){
+    button='<button class="contactAction copyEmail" data-email="'+esc(value)+'">'+t('copy')+'</button>';
+  }else if(href){
+    button='<a class="contactAction" target="_blank" rel="noopener" href="'+esc(href)+'">'+t('open')+'</a>';
+  }
+  return '<div class="contactItem"><div class="contactMeta"><small>'+label+'</small><strong>'+esc(value)+'</strong></div>'+button+'</div>';
+}
+function visibleContacts(r){
+  const rows=[];
+  rows.push(contactCard('Email',r.email,'email','',r));
+  rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'open',r.instagram,r));
+  rows.push(contactCard('Submission',r.submission?t('submissionAvailable'):'','open',r.submission,r));
+  rows.push(contactCard(t('site'),r.site?t('curatorSite'):'','open',r.site,r));
+  const html=rows.filter(Boolean).join('');
+  return '<div class="contactPanel"><div class="contactHead">● '+t('publicContacts')+'</div><div class="contactList">'+(html||'<div class="noContacts">'+t('noPublicContacts')+'</div>')+'</div></div>';
+}
 let radarResults=[];
 const activeFilters=new Set();
 function sortedFilteredResults(){
@@ -72,16 +130,47 @@ function sortedFilteredResults(){
   return a;
 }
 function paintResults(items){
-  const box=$('#results');$('#count').textContent=items.length+' risultati';
-  if(!items.length){box.innerHTML='<div class="empty">Nessun risultato con i filtri selezionati.</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||'Segnale web pubblico')+'</div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(r.badge)+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">Apri su Spotify</a></div></div></div></article>').join('');
+  const box=$('#results');$('#count').textContent=items.length+' '+t('results');
+  if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
+  box.innerHTML=items.map(r=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="top"><div><div class="title">'+esc(r.name)+'</div><div class="source">'+esc(r.snippet||r.sourceTitle||t('publicSignal'))+'</div></div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+t('openSpotify')+'</a></div></div></div></article>').join('');
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
+function updateOutreachBar(){
+  $('#selectedCount').textContent=selectedOutreach.size;
+  $('#outreachBar').classList.toggle('open',selectedOutreach.size>0);
+  renderRecipients();
+}
+function toggleRecipient(email){
+  const r=radarResults.find(x=>String(x.email||'').toLowerCase()===String(email||'').toLowerCase());
+  if(!r)return;
+  const k=keyFor(r);
+  if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);
+  paintResults(sortedFilteredResults());
+  updateOutreachBar();
+}
+function fillTemplate(str,r){
+  const curator=(r.curator||r.curatorName||'').trim() || t('curatorFallback');
+  return String(str||'')
+    .replaceAll('{{curator}}',curator)
+    .replaceAll('{{playlist}}',r.name||'')
+    .replaceAll('{{artist}}',$('#senderArtist').value.trim())
+    .replaceAll('{{track}}',$('#senderTrack').value.trim())
+    .replaceAll('{{spotify_link}}',$('#senderTrackLink').value.trim());
+}
+function mailtoFor(r){
+  const s=fillTemplate($('#mailSubject').value,r),b=fillTemplate($('#mailBody').value,r);
+  return 'mailto:'+encodeURIComponent(r.email)+'?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(b);
+}
+function renderRecipients(){
+  const box=$('#recipientList'); if(!box)return;
+  const items=[...selectedOutreach.values()];
+  box.innerHTML=items.map(r=>'<div class="recipient"><div><strong>'+esc(r.name)+'</strong><small>'+esc(r.email)+'</small></div><div class="recipientActions"><a class="contactAction emailOpen" href="'+mailtoFor(r)+'">'+t('emailOpen')+'</a><button class="recipientRemove" data-remove-email="'+esc(r.email)+'">'+t('remove')+'</button></div></div>').join('');
+}
 let scanClock=null,scanStarted=0;
-function scanStart(){const p=$('#scanPanel');p.classList.add('active');scanStarted=Date.now();clearInterval(scanClock);scanClock=setInterval(()=>{$('#scanTimer').textContent='Tempo '+Math.floor((Date.now()-scanStarted)/1000)+'s';},1000);scanUpdate(4,'Avvio scansione','Interrogo i motori e costruisco la lista iniziale.',{candidates:0,checked:0,contacts:0,google:0});}
+function scanStart(){const p=$('#scanPanel');p.classList.add('active');scanStarted=Date.now();clearInterval(scanClock);scanClock=setInterval(()=>{$('#scanTimer').textContent=t('time')+' '+Math.floor((Date.now()-scanStarted)/1000)+'s';},1000);scanUpdate(4,t('scanStartTitle'),t('scanStartMsg'),{candidates:0,checked:0,contacts:0,google:0});}
 function scanUpdate(pct,title,msg,stats={}){pct=Math.max(4,Math.min(100,Math.round(pct)));$('#scanProgress').style.width=pct+'%';$('#scanPct').textContent=pct+'%';if(title)$('#scanTitle').textContent=title;if(msg)$('#scanMessage').textContent=msg;if(stats.candidates!=null)$('#statCandidates').textContent=stats.candidates;if(stats.checked!=null)$('#statChecked').textContent=stats.checked;if(stats.contacts!=null)$('#statContacts').textContent=stats.contacts;if(stats.google!=null)$('#statGoogle').textContent=stats.google;}
 function scanFinish(title,msg,stats={}){scanUpdate(100,title,msg,stats);clearInterval(scanClock);scanClock=null;setTimeout(()=>$('#scanPanel').classList.remove('active'),1800);}
-function scanError(msg){clearInterval(scanClock);scanClock=null;scanUpdate(100,'Scansione interrotta',msg);$('#scanEngine').textContent='Controlla lo stato dei motori e riprova';}
+function scanError(msg){clearInterval(scanClock);scanClock=null;scanUpdate(100,t('scanInterrupted'),msg);$('#scanEngine').textContent=t('checkEngines');}
 
 async function discover(){
   const b=$('#discover');b.disabled=true;
@@ -90,25 +179,25 @@ async function discover(){
   const googleMax=payload.mode==='complete'?6:3;
   try{
     scanStart();
-    $('#results').innerHTML='<div class="empty">Fase 1/3 · Cerco playlist candidate su Brave e, se serve, Google…</div>';
-    $('#status').textContent='Discovery playlist…';
+    $('#results').innerHTML='<div class="empty">'+t('phase1')+'</div>';
+    $('#status').textContent=t('discoveryStatus');
     const baseRes=await fetch('/api/discover-base',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)});
     const base=await baseRes.json();
-    if(!baseRes.ok)throw new Error(base.error||'Errore discovery');
+    if(!baseRes.ok)throw new Error(base.error||t('discoveryError'));
     const candidates=base.candidates||[];
     googleUsed+=Number(base.googleUsed||0);
-    scanUpdate(22,'Candidate individuate','Ora verifico quali playlist hanno contatti pubblici realmente associati.',{candidates:candidates.length,checked:0,contacts:0,google:googleUsed});
-    $('#count').textContent=candidates.length+' candidate';
+    scanUpdate(22,t('candidatesFound'),t('verifyContacts'),{candidates:candidates.length,checked:0,contacts:0,google:googleUsed});
+    $('#count').textContent=candidates.length+' '+t('candidates');
     if(payload.objective!=='contact'){
       render(candidates);
-      scanFinish('Discovery completata',candidates.length+' playlist trovate.',{candidates:candidates.length,checked:candidates.length,contacts:0,google:googleUsed});
+      scanFinish(t('discoveryComplete'),candidates.length+' '+t('playlistsFound'),{candidates:candidates.length,checked:candidates.length,contacts:0,google:googleUsed});
       $('#status').textContent='Brave '+(base.braveConfigured?'ON':'OFF')+' · Google '+(base.serpapiConfigured?'ON':'OFF')+' · '+candidates.length+' playlist';
       return;
     }
     if(!candidates.length){
       render([]);
-      scanFinish('Scansione completata','Nessuna playlist candidata trovata.',{candidates:0,checked:0,contacts:0,google:googleUsed});
-      $('#status').textContent='0 candidate · controlla genere o motori di ricerca';
+      scanFinish(t('scanComplete'),t('noCandidates'),{candidates:0,checked:0,contacts:0,google:googleUsed});
+      $('#status').textContent=t('zeroCandidates');
       return;
     }
     const final=[];
@@ -117,50 +206,70 @@ async function discover(){
       const chunk=candidates.slice(i,i+chunkSize);
       const done=Math.min(i+chunk.length,candidates.length);
       const remainingGoogle=Math.max(0,googleMax-googleUsed);
-      $('#results').innerHTML='<div class="empty">Fase 2/3 · Ricerca contatti '+i+'/'+candidates.length+'<br><br>Brave scandaglia per primo. Google interviene solo dove mancano contatti utili.</div>';
-      $('#status').textContent='Ricerca contatti · '+i+'/'+candidates.length+' · Google fallback '+googleUsed+'/'+googleMax;
+      $('#results').innerHTML='<div class="empty">'+t('phase2a')+' '+i+'/'+candidates.length+'<br><br>'+t('phase2b')+'</div>';
+      $('#status').textContent=t('contactSearch')+' · '+i+'/'+candidates.length+' · Google fallback '+googleUsed+'/'+googleMax;
       const er=await fetch('/api/contact-enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,candidates:chunk,googleSlots:remainingGoogle})});
       const ed=await er.json();
-      if(!er.ok)throw new Error(ed.error||'Errore ricerca contatti');
+      if(!er.ok)throw new Error(ed.error||t('contactError'));
       googleUsed+=Number(ed.googleUsed||0);
       final.push(...(ed.results||[]));
-      const liveContacts=final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).length;
-      const livePct=22+Math.round((done/candidates.length)*68);
-      scanUpdate(livePct,'Analisi contatti · '+done+'/'+candidates.length,'Verifico email, Instagram, submission e siti pubblici.',{candidates:candidates.length,checked:done,contacts:liveContacts,google:googleUsed});
-      $('#status').textContent='Ricerca contatti · '+done+'/'+candidates.length+' · Google usato '+googleUsed+' volte';
+      const contactCount=final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).length;
+      const pct=22+Math.round((done/candidates.length)*68);
+      scanUpdate(pct,t('contactScan'),t('checked')+' '+done+' '+t('of')+' '+candidates.length+'. '+t('usefulContacts')+' '+contactCount+'.',{candidates:candidates.length,checked:done,contacts:contactCount,google:googleUsed});
     }
-    scanUpdate(94,'Verifica finale','Incrocio le evidenze e ordino i risultati più utili.',{candidates:candidates.length,checked:candidates.length,contacts:final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).length,google:googleUsed});
-    $('#results').innerHTML='<div class="empty">Fase 3/3 · Incrocio Brave + Google, verifico associazioni e ordino…</div>';
-    const filtered=final.filter(r=>r.contactability>=30 && (r.email||r.instagram||r.submission||r.site))
-      .sort((a,b)=>b.score-a.score||b.contactability-a.contactability);
-    render(filtered.slice(0,payload.mode==='complete'?24:12));
-    scanFinish('Scansione completata',filtered.length+' playlist contattabili trovate.',{candidates:candidates.length,checked:candidates.length,contacts:filtered.length,google:googleUsed});
-    $('#status').textContent='Dual-engine · '+filtered.length+' contattabili su '+candidates.length+' · Google fallback '+googleUsed;
+    scanUpdate(94,t('finalVerification'),t('cleanMerge'),{candidates:candidates.length,checked:candidates.length,contacts:final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).length,google:googleUsed});
+    const useful=final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).sort((a,b)=>b.radarScore-a.radarScore);
+    render(useful);
+    scanFinish(t('scanComplete'),useful.length+' '+t('contactableFound'),{candidates:candidates.length,checked:candidates.length,contacts:useful.length,google:googleUsed});
+    $('#status').textContent=useful.length+' '+t('contactable')+' · Google fallback '+googleUsed+'/'+googleMax;
   }catch(e){
-    scanError(e.message||'Errore durante la scansione');
-    $('#status').innerHTML='<span class="error">'+esc(e.message)+'</span>';
+    scanError(e.message);
+    $('#results').innerHTML='<div class="empty error">'+esc(e.message)+'</div>';
+    $('#status').textContent=t('error')+': '+e.message;
   }finally{b.disabled=false}
 }
-function confLabel(n){n=Number(n)||0;return n>=75?['Alta','high']:n>=50?['Media','medium']:['Bassa','low']}
-function confPill(n){const c=confLabel(n);return '<span class="conf '+c[1]+'">'+c[0]+' '+Math.round(Number(n)||0)+'</span>'}
-function contactRow(label,value,confidence,actionHtml){return '<div class="kv"><small>'+esc(label)+'</small><div class="contactValue"><span>'+esc(value||'Non trovato')+'</span>'+(value?confPill(confidence):'')+(actionHtml||'')+'</div></div>'}
-async function copyText(text,button){try{await navigator.clipboard.writeText(text);const old=button.textContent;button.textContent='Copiata';setTimeout(()=>button.textContent=old,1200)}catch(e){button.textContent='Copia fallita'}}
-async function findCurator(button){const idx=button.dataset.index, box=document.getElementById('curator-'+idx);box.classList.add('open');box.innerHTML='<div class="status">Curator Intelligence: verifico associazioni e contatti pubblici…</div>';const old=button.textContent;button.textContent='Analisi curatore…';button.disabled=true;try{const res=await fetch('/api/curator',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({playlistName:button.dataset.playlistName,spotifyUrl:button.dataset.spotifyUrl})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Ricerca contatti non riuscita');const links=[];if(d.instagram)links.push('<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(d.instagram)+'">Apri Instagram</a>');if(d.submission)links.push('<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(d.submission)+'">Apri Submission</a>');if(d.site)links.push('<a class="linkbtn" target="_blank" rel="noopener" href="'+esc(d.site)+'">Apri sito</a>');const copyEmail=d.email?'<button class="microAction copyEmail" data-email="'+esc(d.email)+'">Copia email</button>':'';box.innerHTML='<div class="ciHead"><div class="ciTitle">Curator Intelligence</div><div class="ciScore">Curator Match '+esc(d.curatorMatch)+'/100</div></div><div class="curatorGrid">'+contactRow('Possibile curatore',d.curator,d.curatorConfidence,'')+contactRow('Email pubblica',d.email,d.emailConfidence,copyEmail)+contactRow('Instagram',d.instagramHandle||d.instagram,d.instagramConfidence,'')+contactRow('Submission page',d.submission?'Disponibile':'',d.submissionConfidence,'')+contactRow('Sito',d.site,d.siteConfidence,'')+'</div><div class="association"><b>PERCHÉ QUESTO CONTATTO?</b><br>'+esc(d.reason)+'</div><div class="cardActions">'+links.join('')+'</div>'}catch(e){box.innerHTML='<div class="error">'+esc(e.message)+'</div>'}finally{button.textContent=old;button.disabled=false}}
-document.addEventListener('click',e=>{const b=e.target.closest('.curatorBtn');if(b)findCurator(b);const c=e.target.closest('.copyEmail');if(c)copyText(c.dataset.email,c)});$('#discover').addEventListener('click',discover);$('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/health').then(r=>r.json());$('#status').textContent=d.version+' · Brave '+(d.braveConfigured?'ON':'OFF')+' · Google '+(d.serpapiConfigured?'ON':'OFF')+' · DB '+(d.dbConfigured?'ON':'OFF')}catch(e){$('#status').textContent='Health check fallito'}});
+
+$('#discover').addEventListener('click',discover);
+$('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/health').then(r=>r.json());$('#status').textContent=d.version+' · Brave '+(d.braveConfigured?'ON':'OFF')+' · Google '+(d.serpapiConfigured?'ON':'OFF')+' · DB '+(d.dbConfigured?'ON':'OFF')}catch(e){$('#status').textContent=t('healthFailed')}});
 
 const I18N={
- it:{title:'Playlist contattabili',legal:'<strong>RADAR</strong> utilizza informazioni disponibili pubblicamente sul web per aiutare a individuare playlist e canali di contatto. I dati possono essere incompleti, non aggiornati o attribuiti in modo errato: verifica sempre le informazioni prima di utilizzarle. RADAR non è affiliato a Spotify, Google, Brave o alle piattaforme mostrate.'},
- en:{title:'Contactable playlists',legal:'<strong>RADAR</strong> uses publicly available web information to help identify playlists and contact channels. Data may be incomplete, outdated or incorrectly attributed: always verify information before use. RADAR is not affiliated with Spotify, Google, Brave or the platforms shown.'},
- es:{title:'Playlists contactables',legal:'<strong>RADAR</strong> utiliza información disponible públicamente en la web para ayudar a identificar playlists y canales de contacto. Los datos pueden estar incompletos, desactualizados o atribuidos incorrectamente: verifica siempre la información antes de usarla. RADAR no está afiliado con Spotify, Google, Brave ni con las plataformas mostradas.'},
- fr:{title:'Playlists contactables',legal:'<strong>RADAR</strong> utilise des informations publiquement disponibles sur le web pour aider à identifier des playlists et des canaux de contact. Les données peuvent être incomplètes, obsolètes ou mal attribuées : vérifiez toujours les informations avant utilisation. RADAR n’est affilié ni à Spotify, ni à Google, ni à Brave, ni aux plateformes affichées.'}
-};
+it:{
+ subtitle:'Playlist Intelligence',genreLabel:'Genere principale',artistsLabel:'Artisti simili',modeLabel:'Modalità',strategyLabel:'Strategia',objectiveLabel:'Obiettivo',quick:'Ricerca Rapida',complete:'Analisi Completa',balanced:'Bilanciata',audience:'Audience reale',coverage:'Massima copertura',newCurators:'Nuovi curatori',scan:'Scansiona playlist',health:'Test sistema',ready:'Pronto.',resultsTitle:'Playlist contattabili',sortContactDesc:'Contattabilità ↓',sortContactAsc:'Contattabilità ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confidenza ↓',sortConfAsc:'Confidenza ↑',results:'risultati',noFilteredResults:'Nessun risultato con i filtri selezionati.',publicSignal:'Segnale web pubblico',strongMatch:'Strong Match',worthChecking:'Worth Checking',weakMatch:'Weak Match',publicContacts:'Contatti pubblici trovati',noPublicContacts:'Nessun canale pubblico verificato per questa playlist.',submissionAvailable:'Invio disponibile',site:'Sito',curatorSite:'Sito curatore',copy:'Copia',open:'Apri',emailOpen:'✉ Email',addToList:'Aggiungi alla lista',openSpotify:'Apri su Spotify',selected:'selezionati',outreachMini:'Crea un unico format e personalizzalo per ogni curatore.',prepareOutreach:'Prepara outreach',composerTitle:'Outreach Builder',composerSub:'Un template, email individuali e personalizzate.',subjectLabel:'Oggetto',messageLabel:'Messaggio',variables:'Variabili rapide',artistLabel:'Artista',trackLabel:'Brano',trackLinkLabel:'Link brano',clear:'Svuota lista',sendHint:'RADAR prepara email separate: nessun destinatario vede gli altri. In questa versione l’invio finale si apre nel client email del dispositivo; l’invio diretto batch verrà collegato a un provider email autorizzato.',remove:'Rimuovi',curatorFallback:'Curator',time:'Tempo',scanStartTitle:'Avvio scansione',scanStartMsg:'Interrogo i motori e costruisco la lista iniziale.',scanInterrupted:'Scansione interrotta',checkEngines:'Controlla lo stato dei motori e riprova',phase1:'Fase 1/3 · Cerco playlist candidate su Brave e, se serve, Google…',discoveryStatus:'Discovery playlist…',discoveryError:'Errore discovery',candidatesFound:'Candidate individuate',verifyContacts:'Ora verifico quali playlist hanno contatti pubblici realmente associati.',candidates:'candidate',discoveryComplete:'Discovery completata',playlistsFound:'playlist trovate.',scanComplete:'Scansione completata',noCandidates:'Nessuna playlist candidata trovata.',zeroCandidates:'0 candidate · controlla genere o motori di ricerca',phase2a:'Fase 2/3 · Ricerca contatti',phase2b:'Brave scandaglia per primo. Google interviene solo dove mancano contatti utili.',contactSearch:'Ricerca contatti',contactError:'Errore ricerca contatti',contactScan:'Scansione contatti',checked:'Analizzate',of:'di',usefulContacts:'Contatti utili:',finalVerification:'Verifica finale',cleanMerge:'Pulisco duplicati e associo i segnali migliori.',contactableFound:'playlist contattabili trovate.',contactable:'contattabili',error:'Errore',healthFailed:'Health check fallito',
+ legal:'<strong>RADAR</strong> utilizza informazioni disponibili pubblicamente sul web per aiutare a individuare playlist e canali di contatto. I dati possono essere incompleti, non aggiornati o attribuiti in modo errato: verifica sempre le informazioni prima di utilizzarle. RADAR non è affiliato a Spotify, Google, Brave o alle piattaforme mostrate.'
+},
+en:{
+ subtitle:'Playlist Intelligence',genreLabel:'Primary genre',artistsLabel:'Similar artists',modeLabel:'Mode',strategyLabel:'Strategy',objectiveLabel:'Goal',quick:'Quick Search',complete:'Full Analysis',balanced:'Balanced',audience:'Real audience',coverage:'Maximum coverage',newCurators:'New curators',scan:'Scan playlists',health:'System test',ready:'Ready.',resultsTitle:'Contactable playlists',sortContactDesc:'Contactability ↓',sortContactAsc:'Contactability ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confidence ↓',sortConfAsc:'Confidence ↑',results:'results',noFilteredResults:'No results match the selected filters.',publicSignal:'Public web signal',strongMatch:'Strong Match',worthChecking:'Worth Checking',weakMatch:'Weak Match',publicContacts:'Public contacts found',noPublicContacts:'No verified public contact channel found for this playlist.',submissionAvailable:'Submission available',site:'Website',curatorSite:'Curator website',copy:'Copy',open:'Open',emailOpen:'✉ Email',addToList:'Add to list',openSpotify:'Open on Spotify',selected:'selected',outreachMini:'Create one template and personalize it for every curator.',prepareOutreach:'Prepare outreach',composerTitle:'Outreach Builder',composerSub:'One template, separate personalized emails.',subjectLabel:'Subject',messageLabel:'Message',variables:'Quick variables',artistLabel:'Artist',trackLabel:'Track',trackLinkLabel:'Track link',clear:'Clear list',sendHint:'RADAR prepares separate emails so recipients never see each other. In this version final sending opens in your device email client; direct batch sending will require an authorized email provider.',remove:'Remove',curatorFallback:'Curator',time:'Time',scanStartTitle:'Starting scan',scanStartMsg:'Querying search engines and building the initial list.',scanInterrupted:'Scan interrupted',checkEngines:'Check engine status and try again',phase1:'Phase 1/3 · Finding playlist candidates on Brave and Google when needed…',discoveryStatus:'Playlist discovery…',discoveryError:'Discovery error',candidatesFound:'Candidates found',verifyContacts:'Now checking which playlists have genuinely associated public contacts.',candidates:'candidates',discoveryComplete:'Discovery complete',playlistsFound:'playlists found.',scanComplete:'Scan complete',noCandidates:'No playlist candidates found.',zeroCandidates:'0 candidates · check genre or search engines',phase2a:'Phase 2/3 · Contact search',phase2b:'Brave scans first. Google steps in only when useful contacts are missing.',contactSearch:'Contact search',contactError:'Contact search error',contactScan:'Contact scan',checked:'Checked',of:'of',usefulContacts:'Useful contacts:',finalVerification:'Final verification',cleanMerge:'Removing duplicates and matching the best signals.',contactableFound:'contactable playlists found.',contactable:'contactable',error:'Error',healthFailed:'Health check failed',
+ legal:'<strong>RADAR</strong> uses publicly available web information to help identify playlists and contact channels. Data may be incomplete, outdated or incorrectly attributed: always verify information before use. RADAR is not affiliated with Spotify, Google, Brave or the platforms shown.'
+},
+es:{
+ subtitle:'Inteligencia de Playlists',genreLabel:'Género principal',artistsLabel:'Artistas similares',modeLabel:'Modo',strategyLabel:'Estrategia',objectiveLabel:'Objetivo',quick:'Búsqueda rápida',complete:'Análisis completo',balanced:'Equilibrada',audience:'Audiencia real',coverage:'Máxima cobertura',newCurators:'Nuevos curadores',scan:'Escanear playlists',health:'Probar sistema',ready:'Listo.',resultsTitle:'Playlists contactables',sortContactDesc:'Contactabilidad ↓',sortContactAsc:'Contactabilidad ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confianza ↓',sortConfAsc:'Confianza ↑',results:'resultados',noFilteredResults:'Ningún resultado coincide con los filtros.',publicSignal:'Señal web pública',strongMatch:'Match fuerte',worthChecking:'Vale la pena revisar',weakMatch:'Match débil',publicContacts:'Contactos públicos encontrados',noPublicContacts:'No se encontró un canal público verificado.',submissionAvailable:'Envío disponible',site:'Sitio',curatorSite:'Sitio del curador',copy:'Copiar',open:'Abrir',emailOpen:'✉ Email',addToList:'Añadir a la lista',openSpotify:'Abrir en Spotify',selected:'seleccionados',outreachMini:'Crea un solo formato y personalízalo para cada curador.',prepareOutreach:'Preparar outreach',composerTitle:'Outreach Builder',composerSub:'Una plantilla, emails individuales y personalizados.',subjectLabel:'Asunto',messageLabel:'Mensaje',variables:'Variables rápidas',artistLabel:'Artista',trackLabel:'Tema',trackLinkLabel:'Enlace del tema',clear:'Vaciar lista',sendHint:'RADAR prepara emails separados: ningún destinatario ve a los demás. En esta versión el envío final se abre en el cliente de email del dispositivo; el envío directo por lotes requerirá un proveedor autorizado.',remove:'Quitar',curatorFallback:'Curador',time:'Tiempo',scanStartTitle:'Iniciando escaneo',scanStartMsg:'Consultando motores y creando la lista inicial.',scanInterrupted:'Escaneo interrumpido',checkEngines:'Comprueba los motores e inténtalo de nuevo',phase1:'Fase 1/3 · Buscando playlists candidatas en Brave y Google cuando sea necesario…',discoveryStatus:'Buscando playlists…',discoveryError:'Error de búsqueda',candidatesFound:'Candidatas encontradas',verifyContacts:'Ahora verifico qué playlists tienen contactos públicos realmente asociados.',candidates:'candidatas',discoveryComplete:'Búsqueda completada',playlistsFound:'playlists encontradas.',scanComplete:'Escaneo completado',noCandidates:'No se encontraron playlists candidatas.',zeroCandidates:'0 candidatas · revisa género o motores',phase2a:'Fase 2/3 · Búsqueda de contactos',phase2b:'Brave busca primero. Google interviene solo cuando faltan contactos útiles.',contactSearch:'Búsqueda de contactos',contactError:'Error buscando contactos',contactScan:'Escaneo de contactos',checked:'Analizadas',of:'de',usefulContacts:'Contactos útiles:',finalVerification:'Verificación final',cleanMerge:'Eliminando duplicados y asociando las mejores señales.',contactableFound:'playlists contactables encontradas.',contactable:'contactables',error:'Error',healthFailed:'Falló la prueba del sistema',
+ legal:'<strong>RADAR</strong> utiliza información disponible públicamente en la web para ayudar a identificar playlists y canales de contacto. Los datos pueden estar incompletos, desactualizados o atribuidos incorrectamente: verifica siempre la información antes de usarla. RADAR no está afiliado con Spotify, Google, Brave ni con las plataformas mostradas.'
+},
+fr:{
+ subtitle:'Intelligence Playlists',genreLabel:'Genre principal',artistsLabel:'Artistes similaires',modeLabel:'Mode',strategyLabel:'Stratégie',objectiveLabel:'Objectif',quick:'Recherche rapide',complete:'Analyse complète',balanced:'Équilibrée',audience:'Audience réelle',coverage:'Couverture maximale',newCurators:'Nouveaux curateurs',scan:'Scanner les playlists',health:'Tester le système',ready:'Prêt.',resultsTitle:'Playlists contactables',sortContactDesc:'Contactabilité ↓',sortContactAsc:'Contactabilité ↑',sortMatchDesc:'Match ↓',sortMatchAsc:'Match ↑',sortConfDesc:'Confiance ↓',sortConfAsc:'Confiance ↑',results:'résultats',noFilteredResults:'Aucun résultat avec les filtres sélectionnés.',publicSignal:'Signal web public',strongMatch:'Match fort',worthChecking:'À vérifier',weakMatch:'Match faible',publicContacts:'Contacts publics trouvés',noPublicContacts:'Aucun canal public vérifié trouvé pour cette playlist.',submissionAvailable:'Soumission disponible',site:'Site',curatorSite:'Site du curateur',copy:'Copier',open:'Ouvrir',emailOpen:'✉ Email',addToList:'Ajouter à la liste',openSpotify:'Ouvrir sur Spotify',selected:'sélectionnés',outreachMini:'Créez un seul modèle et personnalisez-le pour chaque curateur.',prepareOutreach:'Préparer l’outreach',composerTitle:'Outreach Builder',composerSub:'Un modèle, des emails séparés et personnalisés.',subjectLabel:'Objet',messageLabel:'Message',variables:'Variables rapides',artistLabel:'Artiste',trackLabel:'Titre',trackLinkLabel:'Lien du titre',clear:'Vider la liste',sendHint:'RADAR prépare des emails séparés : aucun destinataire ne voit les autres. Dans cette version, l’envoi final s’ouvre dans le client email de l’appareil ; l’envoi direct en lot nécessitera un fournisseur email autorisé.',remove:'Retirer',curatorFallback:'Curateur',time:'Temps',scanStartTitle:'Démarrage du scan',scanStartMsg:'Interrogation des moteurs et création de la liste initiale.',scanInterrupted:'Scan interrompu',checkEngines:'Vérifiez les moteurs et réessayez',phase1:'Phase 1/3 · Recherche de playlists candidates sur Brave et Google si nécessaire…',discoveryStatus:'Recherche de playlists…',discoveryError:'Erreur de recherche',candidatesFound:'Candidates trouvées',verifyContacts:'Je vérifie maintenant quelles playlists ont des contacts publics réellement associés.',candidates:'candidates',discoveryComplete:'Recherche terminée',playlistsFound:'playlists trouvées.',scanComplete:'Scan terminé',noCandidates:'Aucune playlist candidate trouvée.',zeroCandidates:'0 candidate · vérifiez le genre ou les moteurs',phase2a:'Phase 2/3 · Recherche de contacts',phase2b:'Brave analyse en premier. Google intervient seulement si des contacts utiles manquent.',contactSearch:'Recherche de contacts',contactError:'Erreur de recherche de contacts',contactScan:'Scan des contacts',checked:'Analysées',of:'sur',usefulContacts:'Contacts utiles :',finalVerification:'Vérification finale',cleanMerge:'Suppression des doublons et association des meilleurs signaux.',contactableFound:'playlists contactables trouvées.',contactable:'contactables',error:'Erreur',healthFailed:'Échec du test système',
+ legal:'<strong>RADAR</strong> utilise des informations publiquement disponibles sur le web pour aider à identifier des playlists et des canaux de contact. Les données peuvent être incomplètes, obsolètes ou mal attribuées : vérifiez toujours les informations avant utilisation. RADAR n’est affilié ni à Spotify, ni à Google, ni à Brave, ni aux plateformes affichées.'
+}};
 function applyLanguage(){
- const l=$('#language')?.value||'it',t=I18N[l]||I18N.it;
- document.documentElement.lang=l; if($('#resultsTitle'))$('#resultsTitle').textContent=t.title;if($('#legalText'))$('#legalText').innerHTML=t.legal;
+  const l=$('#language')?.value||'it';
+  document.documentElement.lang=l;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{const k=el.dataset.i18n;if(I18N[l]?.[k])el.textContent=I18N[l][k]});
+  if($('#legalText'))$('#legalText').innerHTML=t('legal');
+  if(radarResults.length)paintResults(sortedFilteredResults());
+  renderRecipients();
 }
 $('#language')?.addEventListener('change',applyLanguage);
 $('#sortResults')?.addEventListener('change',()=>paintResults(sortedFilteredResults()));
 document.querySelectorAll('.filterChip').forEach(b=>b.addEventListener('click',()=>{const f=b.dataset.filter;if(activeFilters.has(f))activeFilters.delete(f);else activeFilters.add(f);b.classList.toggle('active',activeFilters.has(f));paintResults(sortedFilteredResults())}));
+document.addEventListener('click',e=>{
+  const add=e.target.closest('[data-select-email]'); if(add){toggleRecipient(add.dataset.selectEmail);return}
+  const rm=e.target.closest('[data-remove-email]'); if(rm){selectedOutreach.delete(String(rm.dataset.removeEmail).toLowerCase());paintResults(sortedFilteredResults());updateOutreachBar();return}
+});
+$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients()});
+$('#closeComposer').addEventListener('click',()=>$('#composerOverlay').classList.remove('open'));
+$('#composerOverlay').addEventListener('click',e=>{if(e.target.id==='composerOverlay')$('#composerOverlay').classList.remove('open')});
+$('#clearSelection').addEventListener('click',()=>{selectedOutreach.clear();paintResults(sortedFilteredResults());updateOutreachBar();$('#composerOverlay').classList.remove('open')});
+document.querySelectorAll('.token').forEach(b=>b.addEventListener('click',()=>{const ta=$('#mailBody'),tok=b.dataset.token;const a=ta.selectionStart||ta.value.length,c=ta.selectionEnd||a;ta.value=ta.value.slice(0,a)+tok+ta.value.slice(c);ta.focus();ta.selectionStart=ta.selectionEnd=a+tok.length}));
+['mailSubject','mailBody','senderArtist','senderTrack','senderTrackLink'].forEach(id=>$('#'+id)?.addEventListener('input',renderRecipients));
 applyLanguage();
 
 </script></body></html>`;
