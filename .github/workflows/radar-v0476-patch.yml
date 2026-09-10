@@ -1,31 +1,38 @@
-name: RADAR emergency rollback v0.4.7.25
+name: RADAR browser JS canary
 on:
   push:
     paths:
       - '.github/workflows/radar-v0476-patch.yml'
 permissions:
-  contents: write
+  contents: read
 jobs:
-  rollback:
+  canary:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore last stable worker
+      - name: Worker syntax
+        run: node --check worker.js
+      - name: Extract and syntax-check browser JavaScript
         run: |
-          git checkout 798262cdebb6b494dd70074b54f6b239a401608b -- worker.js
-          node --check worker.js
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('worker.js').read_text()
+          scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I)
+          if not scripts:
+              raise SystemExit('No browser script blocks found')
+          out='\n;\n'.join(scripts)
+          Path('/tmp/radar-client.js').write_text(out)
+          print(f'Extracted {len(scripts)} browser script block(s), {len(out)} chars')
+          PY
+          node --check /tmp/radar-client.js
+      - name: Critical UI canaries
+        run: |
           grep -q "RADAR v0.4.7.25 Cloud" worker.js
           grep -q "function updateClock" worker.js
           grep -q "health').addEventListener" worker.js
           grep -q "if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);" worker.js
           grep -q "outreachPriority.selected" worker.js
+          grep -q "priorityOutreach(sortedFilteredResults" worker.js
           grep -q "spotifySearchPlaylists" worker.js
-      - name: Commit rollback
-        run: |
-          git config user.name "bocafruit"
-          git config user.email "chiesastefanojob@gmail.com"
-          git add worker.js
-          git commit -m "Emergency rollback RADAR to stable v0.4.7.25"
-          git push
+          grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
