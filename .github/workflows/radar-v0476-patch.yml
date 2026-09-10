@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.18
+name: RADAR v0.4.7.19
 'on':
   push:
     paths:
@@ -10,43 +10,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Parallelize contact enrichment
+      - name: Add adaptive contact search
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
           old='\n'.join([
-            "  let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));",
-            "  let googleUsed=0;",
-            "  const results=[];",
-            "  for(const c of candidates){",
-            "    const pack=await deepContactForCandidate(c,input,env,slots>0);",
-            "    results.push(pack.result);",
-            "    if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}",
-            "  }",
-            "  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"
+            "  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));",
+            "  let results=smartBatches.flatMap(x=>x.results);",
+            "  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));",
+            "  let ev=contactEvidence(results,owner||c.name,c.name);",
+            "  let ct=contactabilityFromEvidence(ev);"
           ])
           new='\n'.join([
-            "  const slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));",
-            "  const packs=await Promise.all(candidates.map((c,i)=>deepContactForCandidate(c,input,env,i<slots)));",
-            "  const results=packs.map(pack=>pack.result);",
-            "  const googleUsed=packs.reduce((n,pack)=>n+Number(pack.googleUsed||0),0);",
-            "  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"
+            "  const firstQueries=input.mode==='complete'?queries:queries.slice(0,2);",
+            "  let smartBatches=await Promise.all(firstQueries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));",
+            "  let results=smartBatches.flatMap(x=>x.results);",
+            "  let primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));",
+            "  let ev=contactEvidence(results,owner||c.name,c.name);",
+            "  let ct=contactabilityFromEvidence(ev);",
+            "  const firstStrongest=Math.max(Number(ct.emailConfidence||0),Number(ct.instagramConfidence||0),Number(ct.submissionConfidence||0),Number(ct.siteConfidence||0));",
+            "  if(input.mode!=='complete' && ct.contactability<55 && firstStrongest<75 && queries.length>firstQueries.length){",
+            "    const extraBatches=await Promise.all(queries.slice(firstQueries.length).map(q=>smartSearch(q,env,10)));",
+            "    smartBatches=smartBatches.concat(extraBatches);",
+            "    results=results.concat(extraBatches.flatMap(x=>x.results));",
+            "    primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));",
+            "    ev=contactEvidence(results,owner||c.name,c.name);",
+            "    ct=contactabilityFromEvidence(ev);",
+            "  }"
           ])
-          if old not in s: raise SystemExit('enrichContactBatch marker mismatch')
+          if old not in s: raise SystemExit('adaptive marker mismatch')
           s=s.replace(old,new,1)
-          if "const VERSION = 'RADAR v0.4.7.17 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.17 Cloud';","const VERSION = 'RADAR v0.4.7.18 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.17</div>','<div class="version">v0.4.7.18</div>',1)
+          if "const VERSION = 'RADAR v0.4.7.18 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.18 Cloud';","const VERSION = 'RADAR v0.4.7.19 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.18</div>','<div class="version">v0.4.7.19</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.18 Cloud" worker.js
+          grep -q "RADAR v0.4.7.19 Cloud" worker.js
+          grep -q "const firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
+          grep -q "ct.contactability<55" worker.js
+          grep -q "firstStrongest<75" worker.js
           grep -q "Promise.all(candidates.map" worker.js
-          grep -q "packs.reduce" worker.js
           grep -q "opportunityScore" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
@@ -55,11 +63,11 @@ jobs:
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.18</div>' worker.js
+          grep -q '<div class="version">v0.4.7.19</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.18 parallel contact enrichment" || exit 0
+          git commit -m "RADAR v0.4.7.19 adaptive contact search" || exit 0
           git push
