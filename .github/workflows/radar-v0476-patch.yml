@@ -1,15 +1,31 @@
-name: RADAR browser JS canary
+name: RADAR v0.4.7.26 composer cleanup
 on:
   push:
     paths:
       - '.github/workflows/radar-v0476-patch.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
-  canary:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Composer UI cleanup only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          if "const VERSION = 'RADAR v0.4.7.25 Cloud';" not in s: raise SystemExit('version mismatch')
+          old='<div><label data-i18n="variables">Variabili rapide</label><div class="tokenRow"><button class="token" data-token="{{curator}}">{{curator}}</button><button class="token" data-token="{{playlist}}">{{playlist}}</button><button class="token" data-token="{{artist}}">{{artist}}</button><button class="token" data-token="{{track}}">{{track}}</button><button class="token" data-token="{{spotify_link}}">{{spotify_link}}</button></div></div>'
+          new='<div class="composerSub">Personalizzazione automatica per ogni destinatario.</div>'
+          if old not in s: raise SystemExit('variables UI block mismatch')
+          s=s.replace(old,new,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.25 Cloud';","const VERSION = 'RADAR v0.4.7.26 Cloud';",1)
+          if '<div class="version">v0.4.7.25</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.25</div>','<div class="version">v0.4.7.26</div>',1)
+          p.write_text(s)
+          PY
       - name: Worker syntax
         run: node --check worker.js
       - name: Extract and syntax-check browser JavaScript
@@ -19,20 +35,29 @@ jobs:
           import re
           s=Path('worker.js').read_text()
           scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I)
-          if not scripts:
-              raise SystemExit('No browser script blocks found')
+          if not scripts: raise SystemExit('No browser script blocks found')
           out='\n;\n'.join(scripts)
           Path('/tmp/radar-client.js').write_text(out)
           print(f'Extracted {len(scripts)} browser script block(s), {len(out)} chars')
           PY
           node --check /tmp/radar-client.js
-      - name: Critical UI canaries
+      - name: Critical regression canaries
         run: |
-          grep -q "RADAR v0.4.7.25 Cloud" worker.js
+          grep -q "RADAR v0.4.7.26 Cloud" worker.js
           grep -q "function updateClock" worker.js
           grep -q "health').addEventListener" worker.js
           grep -q "if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);" worker.js
           grep -q "outreachPriority.selected" worker.js
           grep -q "priorityOutreach(sortedFilteredResults" worker.js
+          grep -q "function fillTemplate" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
+          grep -q "Personalizzazione automatica per ogni destinatario." worker.js
+          if grep -q '<label data-i18n="variables">Variabili rapide</label>' worker.js; then exit 1; fi
+      - name: Commit worker
+        run: |
+          git config user.name "bocafruit"
+          git config user.email "chiesastefanojob@gmail.com"
+          git add worker.js
+          git commit -m "RADAR v0.4.7.26 composer UI cleanup only" || exit 0
+          git push
