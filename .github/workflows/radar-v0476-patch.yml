@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.19
+name: RADAR v0.4.7.20
 'on':
   push:
     paths:
@@ -10,64 +10,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add adaptive contact search
+      - name: Add outreach priority
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old='\n'.join([
-            "  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));",
-            "  let results=smartBatches.flatMap(x=>x.results);",
-            "  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));",
-            "  let ev=contactEvidence(results,owner||c.name,c.name);",
-            "  let ct=contactabilityFromEvidence(ev);"
-          ])
-          new='\n'.join([
-            "  const firstQueries=input.mode==='complete'?queries:queries.slice(0,2);",
-            "  let smartBatches=await Promise.all(firstQueries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));",
-            "  let results=smartBatches.flatMap(x=>x.results);",
-            "  let primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));",
-            "  let ev=contactEvidence(results,owner||c.name,c.name);",
-            "  let ct=contactabilityFromEvidence(ev);",
-            "  const firstStrongest=Math.max(Number(ct.emailConfidence||0),Number(ct.instagramConfidence||0),Number(ct.submissionConfidence||0),Number(ct.siteConfidence||0));",
-            "  if(input.mode!=='complete' && ct.contactability<55 && firstStrongest<75 && queries.length>firstQueries.length){",
-            "    const extraBatches=await Promise.all(queries.slice(firstQueries.length).map(q=>smartSearch(q,env,10)));",
-            "    smartBatches=smartBatches.concat(extraBatches);",
-            "    results=results.concat(extraBatches.flatMap(x=>x.results));",
-            "    primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));",
-            "    ev=contactEvidence(results,owner||c.name,c.name);",
-            "    ct=contactabilityFromEvidence(ev);",
-            "  }"
-          ])
-          if old not in s: raise SystemExit('adaptive marker mismatch')
+          old="function paintResults(items){\n  const box=$('#results');$('#count').textContent=items.length+' '+t('results');"
+          new="function outreachPriority(r){\n  const score=Number(r.opportunityScore||0);\n  const strongest=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));\n  if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};\n  if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};\n  return null;\n}\nfunction paintResults(items){\n  const box=$('#results');$('#count').textContent=items.length+' '+t('results');"
+          if old not in s: raise SystemExit('paintResults marker mismatch')
           s=s.replace(old,new,1)
-          if "const VERSION = 'RADAR v0.4.7.18 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.18 Cloud';","const VERSION = 'RADAR v0.4.7.19 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.18</div>','<div class="version">v0.4.7.19</div>',1)
+          old2="+(r.opportunityScore!=null?'<div class=\"opportunityIdentity\"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+metaHtml(r)"
+          new2="+(r.opportunityScore!=null?'<div class=\"opportunityIdentity\"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+(outreachPriority(r)?'<div class=\"outreachPriority '+outreachPriority(r).cls+'\">'+outreachPriority(r).label+'</div>':'')+metaHtml(r)"
+          if old2 not in s: raise SystemExit('opportunity UI marker mismatch')
+          s=s.replace(old2,new2,1)
+          css=".outreachPriority{display:inline-flex;margin-top:7px;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.08em}.outreachPriority.high{color:var(--green);border:1px solid rgba(105,240,181,.3);background:rgba(105,240,181,.09)}.outreachPriority.medium{color:var(--amber);border:1px solid rgba(255,209,102,.28);background:rgba(255,209,102,.08)}\n"
+          marker="/* v0.4.0F Premium Result Cards */"
+          if marker not in s: raise SystemExit('css marker mismatch')
+          s=s.replace(marker,css+'\n'+marker,1)
+          if "const VERSION = 'RADAR v0.4.7.19 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.19 Cloud';","const VERSION = 'RADAR v0.4.7.20 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.19</div>','<div class="version">v0.4.7.20</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.19 Cloud" worker.js
-          grep -q "const firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
-          grep -q "ct.contactability<55" worker.js
-          grep -q "firstStrongest<75" worker.js
-          grep -q "Promise.all(candidates.map" worker.js
+          grep -q "RADAR v0.4.7.20 Cloud" worker.js
+          grep -q "function outreachPriority" worker.js
+          grep -q "PRIORITÀ OUTREACH" worker.js
+          grep -q "BUONA OPPORTUNITÀ" worker.js
           grep -q "opportunityScore" worker.js
+          grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
+          grep -q "Promise.all(candidates.map" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
-          grep -q "contactConfidenceBadge" worker.js
-          grep -q "contactEvidence(results,primaryName,playlistName='')" worker.js
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.19</div>' worker.js
+          grep -q '<div class="version">v0.4.7.20</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.19 adaptive contact search" || exit 0
+          git commit -m "RADAR v0.4.7.20 outreach priority" || exit 0
           git push
