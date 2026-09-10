@@ -1,0 +1,57 @@
+name: RADAR v0.4.7.5
+on:
+  push:
+    paths:
+      - '.github/workflows/radar-v0475.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch curator identity display
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          old="""function displayPlaylistIdentity(r){
+  const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+  const fallback=String((r&&r.name)||'').trim();
+  const source=raw||fallback;
+  const m=source.match(/^(.*?)\\s*[-–—:]\\s*playlist\\s+by\\s+(.+?)\\s*$/i);
+  if(m){
+    const playlist=m[1].trim(),curator=m[2].trim();
+    if(playlist.length>=3&&curator.length>=2)return {name:playlist,curator};
+  }
+  return {name:fallback||source,curator:''};
+}"""
+          new="""function displayPlaylistIdentity(r){
+  const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+  const fallback=String((r&&r.name)||'').trim();
+  const source=(raw||fallback)
+    .replace(/\\s*[|·]\\s*Spotify\\s*$/i,'')
+    .replace(/\\s*[-–—:]\\s*Spotify\\s*$/i,'')
+    .trim();
+  const m=source.match(/^(.*?)\\s*[-–—:]\\s*playlist\\s+by\\s+(.+?)\\s*$/i);
+  if(m){
+    const playlist=m[1].trim(),curator=m[2].trim();
+    if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator};
+  }
+  return {name:fallback||source,curator:''};
+}"""
+          if old not in s:
+              raise SystemExit('Target displayPlaylistIdentity block not found; refusing unsafe patch')
+          s=s.replace(old,new,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.4 Cloud';","const VERSION = 'RADAR v0.4.7.5 Cloud';",1)
+          p.write_text(s)
+      - name: Syntax check
+        run: node --check worker.js
+      - name: Commit worker
+        run: |
+          git config user.name "bocafruit"
+          git config user.email "chiesastefanojob@gmail.com"
+          git add worker.js
+          git commit -m "RADAR v0.4.7.5 curator identity" || exit 0
+          git push
