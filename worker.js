@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.11 Cloud';
+const VERSION = 'RADAR v0.4.7.12 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.11</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.12</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -629,6 +629,32 @@ function rescoreContactFirst(r,input){
   return{...r,score,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};
 }
 
+let spotifyTokenCache={token:'',expiresAt:0};
+
+async function spotifyAccessToken(env){
+  if(!env.SPOTIFY_CLIENT_ID||!env.SPOTIFY_CLIENT_SECRET)return'';
+  if(spotifyTokenCache.token&&Date.now()<spotifyTokenCache.expiresAt-60000)return spotifyTokenCache.token;
+  const basic=btoa(env.SPOTIFY_CLIENT_ID+':'+env.SPOTIFY_CLIENT_SECRET);
+  const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Authorization':'Basic '+basic,'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=client_credentials'});
+  if(!r.ok)return'';
+  const d=await r.json();
+  const token=String(d.access_token||'');
+  if(token)spotifyTokenCache={token,expiresAt:Date.now()+Math.max(60,Number(d.expires_in||3600))*1000};
+  return token;
+}
+
+async function spotifyPlaylistIdentity(spotifyUrl,env){
+  const m=String(spotifyUrl||'').match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/i);
+  if(!m)return null;
+  const token=await spotifyAccessToken(env);
+  if(!token)return null;
+  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(m[1])+'?fields=id,name,owner(display_name,id,external_urls),external_urls';
+  const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
+  if(!r.ok)return null;
+  const d=await r.json();
+  return{playlistId:String(d.id||m[1]),name:String(d.name||''),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
+}
+
 async function deepContactForCandidate(c,input,env,allowGoogle=false){
   const raw=String(c.name||'').replace(/"/g,'').trim();
   const genre=String(input.genre||'').replace(/"/g,'').trim();
@@ -653,7 +679,10 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
     }
     googleUsed=1;
   }
-  return{result:rescoreContactFirst({...c,...ct,curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
+  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
+  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
+  const curator=spotify?.owner||webCurator;
+  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:spotify?.owner?'Spotify':'Web',spotifyOwnerVerified:!!spotify?.owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
 }
 
 async function discoverBase(input,env){
