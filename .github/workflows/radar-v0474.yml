@@ -1,0 +1,69 @@
+name: RADAR v0.4.7.4
+on:
+  push:
+    paths:
+      - '.github/workflows/radar-v0474.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v0.4.7.4 display-only title fix
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          s=s.replace("const VERSION = 'RADAR v0.4.7.3 Cloud';", "const VERSION = 'RADAR v0.4.7.4 Cloud';", 1)
+          s=s.replace('<div class="version">v0.4.7.3</div>', '<div class="version">v0.4.7.4</div>', 1)
+          old="""function displayPlaylistIdentity(r){
+            const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+            const fallback=String((r&&r.name)||'').trim();
+            const source=raw||fallback;
+            const m=source.match(/^(.*?)\\s*[-–—:]\\s*playli(?:s)?t\\s+by\\s+(.+?)\\s*$/i);
+            if(m){
+              const playlist=m[1].trim(),curator=m[2].trim();
+              if(playlist.length>=3&&curator.length>=2)return {name:playlist,curator};
+            }
+            return {name:fallback||source,curator:''};
+          }"""
+          new="""function displayPlaylistIdentity(r){
+            const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+            const fallback=String((r&&r.name)||'').trim();
+            const source=raw||fallback;
+            const m=source.match(/^(.*?)\\s*[-–—:]\\s*playlist\\s+by\\s+(.+?)\\s*$/i);
+            if(m){
+              const playlist=m[1].trim(),curator=m[2].trim();
+              if(playlist.length>=3&&curator.length>=2)return {name:playlist,curator};
+            }
+            return {name:fallback||source,curator:''};
+          }"""
+          if old not in s: raise SystemExit('identity anchor not found')
+          s=s.replace(old,new,1)
+          old="""      const d=await res.json();
+                if(!d.thumbnail_url)return;
+                img.onload=()=>{img.style.opacity='1';const f=img.previousElementSibling;if(f)f.style.display='none'};"""
+          new="""      const d=await res.json();
+                const canonical=String(d.title||'').replace(/\\s+/g,' ').trim();
+                const titleNode=document.querySelector('.title[data-title-index="'+i+'"]');
+                if(titleNode&&canonical.length>=3&&canonical.length<=180)titleNode.textContent=canonical;
+                if(!d.thumbnail_url)return;
+                img.onload=()=>{img.style.opacity='1';const f=img.previousElementSibling;if(f)f.style.display='none'};"""
+          if old not in s: raise SystemExit('oembed anchor not found')
+          s=s.replace(old,new,1)
+          old='<div class="title">\'+esc(displayPlaylistIdentity(r).name)+\'</div>'
+          new='<div class="title" data-title-index="\'+i+\'">\'+esc(displayPlaylistIdentity(r).name)+\'</div>'
+          if old not in s: raise SystemExit('title anchor not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+      - name: Syntax check
+        run: node --check worker.js
+      - name: Commit v0.4.7.4
+        run: |
+          git config user.name "RADAR Automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add worker.js
+          git commit -m "RADAR v0.4.7.4 canonical playlist titles"
+          git push
