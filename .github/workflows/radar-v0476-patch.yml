@@ -1,5 +1,5 @@
 name: RADAR v0.4.7.17
-on:
+'on':
   push:
     paths:
       - '.github/workflows/radar-v0476-patch.yml'
