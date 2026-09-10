@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.22 Cloud';
+const VERSION = 'RADAR v0.4.7.23 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.22</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.23</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -285,7 +285,7 @@ function outreachPriority(r){
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title" data-title-index="'+i+'">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+(r.opportunityScore!=null?'<div class="opportunityIdentity"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+(outreachPriority(r)?'<button class="outreachPriority '+outreachPriority(r).cls+'" data-priority-index="'+i+'">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title" data-title-index="'+i+'">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+(r.opportunityScore!=null?'<div class="opportunityIdentity"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+(outreachPriority(r)?'<button type="button" class="outreachPriority '+outreachPriority(r).cls+'" data-priority-index="'+i+'" onclick="priorityOutreach(sortedFilteredResults()[Number(this.dataset.priorityIndex)])">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
   loadPlaylistCovers(items); verifyVisibleLinks();
 }
 function priorityOutreach(r){
@@ -436,12 +436,6 @@ $('#language')?.addEventListener('change',applyLanguage);
 $('#sortResults')?.addEventListener('change',()=>paintResults(sortedFilteredResults()));
 document.querySelectorAll('.filterChip').forEach(b=>b.addEventListener('click',()=>{const f=b.dataset.filter;if(activeFilters.has(f))activeFilters.delete(f);else activeFilters.add(f);b.classList.toggle('active',activeFilters.has(f));paintResults(sortedFilteredResults())}));
 document.addEventListener('click',e=>{
-  const priority=e.target.closest('[data-priority-index]');
-  if(priority){
-    const shown=sortedFilteredResults();
-    priorityOutreach(shown[Number(priority.dataset.priorityIndex)]);
-    return;
-  }
   const add=e.target.closest('[data-select-email]'); if(add){toggleRecipient(add.dataset.selectEmail);return}
   const rm=e.target.closest('[data-remove-email]'); if(rm){selectedOutreach.delete(String(rm.dataset.removeEmail).toLowerCase());paintResults(sortedFilteredResults());updateOutreachBar();return}
 });
