@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.16
+name: RADAR v0.4.7.17
 on:
   push:
     paths:
@@ -10,44 +10,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add owner and playlist evidence boost
+      - name: Add opportunity score
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
           changes=[
-            ("function contactEvidence(results,playlistName){","function contactEvidence(results,primaryName,playlistName=''){"),
-            ("  const name=normalize(playlistName), words=name.split(/\\s+/).filter(w=>w.length>=4);","  const name=normalize(primaryName), playlist=normalize(playlistName), words=name.split(/\\s+/).filter(w=>w.length>=4), playlistWords=playlist.split(/\\s+/).filter(w=>w.length>=4);"),
-            ("    if(name && text.includes(name)) assoc+=45;\n    const hits=words.filter(w=>text.includes(w)).length;\n    assoc+=Math.min(30,hits*10);\n    if(/spotify|playlist/.test(text)) assoc+=10;","    const ownerExact=!!name&&text.includes(name);\n    const playlistExact=!!playlist&&text.includes(playlist);\n    if(ownerExact)assoc+=45;\n    const hits=words.filter(w=>text.includes(w)).length;\n    assoc+=Math.min(30,hits*10);\n    if(playlistExact)assoc+=25;\n    const playlistHits=playlistWords.filter(w=>text.includes(w)).length;\n    assoc+=Math.min(20,playlistHits*5);\n    if(ownerExact&&playlistExact)assoc+=20;\n    if(/spotify|playlist/.test(text)) assoc+=10;"),
-            ("let ev=contactEvidence(results,owner||c.name);","let ev=contactEvidence(results,owner||c.name,c.name);"),
-            ("ev=contactEvidence(results,owner||c.name);","ev=contactEvidence(results,owner||c.name,c.name);"),
-            ("const VERSION = 'RADAR v0.4.7.15 Cloud';","const VERSION = 'RADAR v0.4.7.16 Cloud';"),
-            ('<div class="version">v0.4.7.15</div>','<div class="version">v0.4.7.16</div>')
+            ("  let score=clamp(r.match*.32+r.contactability*.40+r.activity*.10+r.confidence*.18);","  const bestContactConfidence=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));\n  const opportunityScore=clamp(Math.round(Number(r.match||0)*.30+Number(r.contactability||0)*.25+bestContactConfidence*.25+(r.spotifyOwnerVerified?15:0)+(r.spotifyPrimary?5:0)));\n  let score=clamp(r.match*.32+r.contactability*.40+r.activity*.10+r.confidence*.18);"),
+            ("  return{...r,score,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};","  return{...r,score,opportunityScore,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};"),
+            ("    if(s==='contact-desc')return n(y.contactability)-n(x.contactability);","    if(s==='contact-desc')return n(y.opportunityScore)-n(x.opportunityScore)||n(y.contactability)-n(x.contactability);"),
+            ("    if(s==='contact-asc')return n(x.contactability)-n(y.contactability);","    if(s==='contact-asc')return n(x.opportunityScore)-n(y.opportunityScore)||n(x.contactability)-n(y.contactability);"),
+            ("+(displayPlaylistIdentity(r).curator?'<div class=\"curatorIdentity\"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+metaHtml(r)","+(displayPlaylistIdentity(r).curator?'<div class=\"curatorIdentity\"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+(r.opportunityScore!=null?'<div class=\"opportunityIdentity\"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+metaHtml(r)"),
+            (".curatorIdentity{",".opportunityIdentity{font-size:10px;color:var(--muted);margin-top:5px;letter-spacing:.05em}.opportunityIdentity b{color:var(--green)}.curatorIdentity{"),
+            ("const VERSION = 'RADAR v0.4.7.16 Cloud';","const VERSION = 'RADAR v0.4.7.17 Cloud';"),
+            ('<div class="version">v0.4.7.16</div>','<div class="version">v0.4.7.17</div>')
           ]
           for old,new in changes:
-            if old not in s: raise SystemExit('Expected marker missing: '+old[:100])
+            if old not in s: raise SystemExit('Expected marker missing: '+old[:120])
             s=s.replace(old,new,1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.16 Cloud" worker.js
-          grep -q "contactEvidence(results,primaryName,playlistName='')" worker.js
-          grep -q "ownerExact&&playlistExact" worker.js
-          grep -q "contactEvidence(results,owner||c.name,c.name)" worker.js
-          grep -q "contactConfidenceBadge" worker.js
+          grep -q "RADAR v0.4.7.17 Cloud" worker.js
+          grep -q "opportunityScore" worker.js
+          grep -q "bestContactConfidence" worker.js
+          grep -q "spotifyOwnerVerified?15" worker.js
+          grep -q "opportunityIdentity" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
+          grep -q "contactConfidenceBadge" worker.js
+          grep -q "contactEvidence(results,primaryName,playlistName='')" worker.js
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.16</div>' worker.js
+          grep -q '<div class="version">v0.4.7.17</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.16 evidence boost" || exit 0
+          git commit -m "RADAR v0.4.7.17 opportunity score" || exit 0
           git push
