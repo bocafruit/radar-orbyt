@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.12 Cloud';
+const VERSION = 'RADAR v0.4.7.13 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.12</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.13</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -655,6 +655,38 @@ async function spotifyPlaylistIdentity(spotifyUrl,env){
   return{playlistId:String(d.id||m[1]),name:String(d.name||''),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
 }
 
+async function spotifySearchPlaylists(input,env){
+  const genre=String(input.genre||'').trim();
+  if(!genre)return[];
+  const token=await spotifyAccessToken(env);
+  if(!token)return[];
+  const market=String(env.SPOTIFY_MARKET||'IT').toUpperCase();
+  const artists=String(input.artists||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,2);
+  const queries=input.mode==='complete'?unique([genre,...artists.map(a=>genre+' '+a)]).slice(0,3):[genre];
+  const pages=input.mode==='complete'?2:1;
+  const found=new Map();
+  for(const q of queries){
+    for(let page=0;page<pages;page++){
+      const u=new URL('https://api.spotify.com/v1/search');
+      u.searchParams.set('q',q);
+      u.searchParams.set('type','playlist');
+      u.searchParams.set('market',market);
+      u.searchParams.set('limit','10');
+      u.searchParams.set('offset',String(page*10));
+      const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}}).catch(()=>null);
+      if(!r||!r.ok){if(r&&r.status===429)break;continue}
+      const d=await r.json().catch(()=>({}));
+      for(const x of d.playlists?.items||[]){
+        if(!x?.id||!x?.name)continue;
+        const url=String(x.external_urls?.spotify||('https://open.spotify.com/playlist/'+x.id));
+        if(found.has(url))continue;
+        found.set(url,{title:String(x.name||''),description:String(x.description||''),url,spotifyPrimary:true});
+      }
+    }
+  }
+  return [...found.values()];
+}
+
 async function deepContactForCandidate(c,input,env,allowGoogle=false){
   const raw=String(c.name||'').replace(/"/g,'').trim();
   const genre=String(input.genre||'').replace(/"/g,'').trim();
@@ -688,10 +720,11 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
 async function discoverBase(input,env){
   const genre=String(input.genre||'').trim();
   if(!genre)return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed:0,candidates:[]};
-  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,googleUsed:0,candidates:[]};
+  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY&&(!env.SPOTIFY_CLIENT_ID||!env.SPOTIFY_CLIENT_SECRET))return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,spotifyConfigured:false,googleUsed:0,candidates:[]};
+  const spotifyPrimary=await spotifySearchPlaylists(input,env).catch(()=>[]);
   const queries=buildQueries(input);
   const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
-  let rawResults=smartBatches.flatMap(x=>x.results);
+  let rawResults=spotifyPrimary.concat(smartBatches.flatMap(x=>x.results));
   let googleUsed=0;
   const desired=input.mode==='complete'?10:5;
   const initialSpotifyCount=unique(rawResults.map(r=>cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title))).length;
@@ -707,14 +740,14 @@ async function discoverBase(input,env){
     const spotifyUrl=cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title);
     if(!spotifyUrl||map.has(spotifyUrl))continue;
     const base=scoreResult(r,input);
-    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',...base});
+    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',discoverySource:r.spotifyPrimary?'Spotify':'Web',spotifyPrimary:!!r.spotifyPrimary,...base,score:clamp(base.score+(r.spotifyPrimary?8:0)),confidence:clamp(base.confidence+(r.spotifyPrimary?8:0))});
   }
   let candidates=[...map.values()].sort((a,b)=>b.score-a.score);
   const cap=input.mode==='complete'?18:9;
   candidates=candidates.slice(0,cap);
-  const enginesUsed=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None').concat(googleUsed?['Google']:[]));
+  const enginesUsed=unique((spotifyPrimary.length?['Spotify']:[]).concat(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None')).concat(googleUsed?['Google']:[]));
   const failoverPaths=unique(smartBatches.map(x=>x.tried&&x.tried.length>1?x.tried.join(' → '):'').filter(Boolean));
-  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,candidates,providers:providerStatus(env),enginesUsed,failoverPaths};
+  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,spotifyConfigured:!!env.SPOTIFY_CLIENT_ID&&!!env.SPOTIFY_CLIENT_SECRET,spotifyPrimaryCount:spotifyPrimary.length,googleUsed,candidates,providers:providerStatus(env),enginesUsed,failoverPaths};
 }
 
 async function enrichContactBatch(input,env){
