@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.3 Cloud';
+const VERSION = 'RADAR v0.4.7.4 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.3</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.4</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -129,7 +129,7 @@ function displayPlaylistIdentity(r){
   const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
   const fallback=String((r&&r.name)||'').trim();
   const source=raw||fallback;
-  const m=source.match(/^(.*?)\s*[-–—:]\s*playli(?:s)?t\s+by\s+(.+?)\s*$/i);
+  const m=source.match(/^(.*?)\s*[-–—:]\s*playlist\s+by\s+(.+?)\s*$/i);
   if(m){
     const playlist=m[1].trim(),curator=m[2].trim();
     if(playlist.length>=3&&curator.length>=2)return {name:playlist,curator};
@@ -247,6 +247,9 @@ async function loadPlaylistCovers(items){
       const res=await fetch(u);
       if(!res.ok)return;
       const d=await res.json();
+      const canonical=String(d.title||'').replace(/\s+/g,' ').trim();
+      const titleNode=document.querySelector('.title[data-title-index="'+i+'"]');
+      if(titleNode&&canonical.length>=3&&canonical.length<=180)titleNode.textContent=canonical;
       if(!d.thumbnail_url)return;
       img.onload=()=>{img.style.opacity='1';const f=img.previousElementSibling;if(f)f.style.display='none'};
       img.src=d.thumbnail_url;
@@ -257,7 +260,7 @@ async function loadPlaylistCovers(items){
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title" data-title-index="'+i+'">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
   loadPlaylistCovers(items); verifyVisibleLinks();
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
