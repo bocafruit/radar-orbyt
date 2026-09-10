@@ -32,12 +32,10 @@ jobs:
           new_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');refreshComposerPreview();renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
           if old_open not in s: raise SystemExit('open mismatch')
           s=s.replace(old_open,new_open,1)
-          marker="$('#senderArtist').addEventListener('input',renderRecipients);"
-          repl="$('#senderArtist').addEventListener('input',()=>{refreshComposerPreview();renderRecipients()});\n$('#senderTrack').addEventListener('input',()=>{refreshComposerPreview();renderRecipients()});\n$('#senderTrackLink').addEventListener('input',()=>{refreshComposerPreview();renderRecipients()});"
-          if marker not in s: raise SystemExit('sender listener mismatch')
-          s=s.replace(marker,repl,1)
-          s=s.replace("$('#senderTrack').addEventListener('input',renderRecipients);",'',1)
-          s=s.replace("$('#senderTrackLink').addEventListener('input',renderRecipients);",'',1)
+          old_listener="['mailSubject','mailBody','senderArtist','senderTrack','senderTrackLink'].forEach(id=>$('#'+id)?.addEventListener('input',renderRecipients));"
+          new_listener="['senderArtist','senderTrack','senderTrackLink'].forEach(id=>$('#'+id)?.addEventListener('input',()=>{refreshComposerPreview();renderRecipients()}));"
+          if old_listener not in s: raise SystemExit('input listener mismatch')
+          s=s.replace(old_listener,new_listener,1)
           css_marker='.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}'
           css_new=css_marker+'.personalizedHint{margin-top:7px;font-size:10px;color:var(--green);letter-spacing:.02em}'
           if css_marker not in s: raise SystemExit('css mismatch')
