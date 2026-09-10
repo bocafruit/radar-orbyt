@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.12
+name: RADAR v0.4.7.13
 on:
   push:
     paths:
@@ -10,63 +10,94 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add Spotify owner verification
+      - name: Add Spotify Search primary discovery
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
+
           marker="async function deepContactForCandidate(c,input,env,allowGoogle=false){"
           helper='\n'.join([
-            "let spotifyTokenCache={token:'',expiresAt:0};",
-            "",
-            "async function spotifyAccessToken(env){",
-            "  if(!env.SPOTIFY_CLIENT_ID||!env.SPOTIFY_CLIENT_SECRET)return'';",
-            "  if(spotifyTokenCache.token&&Date.now()<spotifyTokenCache.expiresAt-60000)return spotifyTokenCache.token;",
-            "  const basic=btoa(env.SPOTIFY_CLIENT_ID+':'+env.SPOTIFY_CLIENT_SECRET);",
-            "  const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Authorization':'Basic '+basic,'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=client_credentials'});",
-            "  if(!r.ok)return'';",
-            "  const d=await r.json();",
-            "  const token=String(d.access_token||'');",
-            "  if(token)spotifyTokenCache={token,expiresAt:Date.now()+Math.max(60,Number(d.expires_in||3600))*1000};",
-            "  return token;",
-            "}",
-            "",
-            "async function spotifyPlaylistIdentity(spotifyUrl,env){",
-            "  const m=String(spotifyUrl||'').match(/open\\.spotify\\.com\\/playlist\\/([A-Za-z0-9]+)/i);",
-            "  if(!m)return null;",
+            "async function spotifySearchPlaylists(input,env){",
+            "  const genre=String(input.genre||'').trim();",
+            "  if(!genre)return[];",
             "  const token=await spotifyAccessToken(env);",
-            "  if(!token)return null;",
-            "  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(m[1])+'?fields=id,name,owner(display_name,id,external_urls),external_urls';",
-            "  const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});",
-            "  if(!r.ok)return null;",
-            "  const d=await r.json();",
-            "  return{playlistId:String(d.id||m[1]),name:String(d.name||''),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};",
+            "  if(!token)return[];",
+            "  const market=String(env.SPOTIFY_MARKET||'IT').toUpperCase();",
+            "  const artists=String(input.artists||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,2);",
+            "  const queries=input.mode==='complete'?unique([genre,...artists.map(a=>genre+' '+a)]).slice(0,3):[genre];",
+            "  const pages=input.mode==='complete'?2:1;",
+            "  const found=new Map();",
+            "  for(const q of queries){",
+            "    for(let page=0;page<pages;page++){",
+            "      const u=new URL('https://api.spotify.com/v1/search');",
+            "      u.searchParams.set('q',q);",
+            "      u.searchParams.set('type','playlist');",
+            "      u.searchParams.set('market',market);",
+            "      u.searchParams.set('limit','10');",
+            "      u.searchParams.set('offset',String(page*10));",
+            "      const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}}).catch(()=>null);",
+            "      if(!r||!r.ok){if(r&&r.status===429)break;continue}",
+            "      const d=await r.json().catch(()=>({}));",
+            "      for(const x of d.playlists?.items||[]){",
+            "        if(!x?.id||!x?.name)continue;",
+            "        const url=String(x.external_urls?.spotify||('https://open.spotify.com/playlist/'+x.id));",
+            "        if(found.has(url))continue;",
+            "        found.set(url,{title:String(x.name||''),description:String(x.description||''),url,spotifyPrimary:true});",
+            "      }",
+            "    }",
+            "  }",
+            "  return [...found.values()];",
             "}",
             ""
           ])+'\n'
-          if marker not in s: raise SystemExit('deep contact marker not found')
+          if marker not in s: raise SystemExit('deep contact marker missing')
+          if 'async function spotifySearchPlaylists(input,env){' in s: raise SystemExit('Spotify Search helper already exists')
           s=s.replace(marker,helper+marker,1)
-          old="  return{result:rescoreContactFirst({...c,...ct,curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
-          new="  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);\n  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);\n  const curator=spotify?.owner||webCurator;\n  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:spotify?.owner?'Spotify':'Web',spotifyOwnerVerified:!!spotify?.owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
-          if old not in s: raise SystemExit('deep contact return marker not found')
+
+          old="  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,googleUsed:0,candidates:[]};\n  const queries=buildQueries(input);\n  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));\n  let rawResults=smartBatches.flatMap(x=>x.results);"
+          new="  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY&&(!env.SPOTIFY_CLIENT_ID||!env.SPOTIFY_CLIENT_SECRET))return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,spotifyConfigured:false,googleUsed:0,candidates:[]};\n  const spotifyPrimary=await spotifySearchPlaylists(input,env).catch(()=>[]);\n  const queries=buildQueries(input);\n  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));\n  let rawResults=spotifyPrimary.concat(smartBatches.flatMap(x=>x.results));"
+          if old not in s: raise SystemExit('discoverBase source marker missing')
           s=s.replace(old,new,1)
-          if "const VERSION = 'RADAR v0.4.7.11 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.11 Cloud';","const VERSION = 'RADAR v0.4.7.12 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.11</div>','<div class="version">v0.4.7.12</div>',1)
+
+          old="    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',...base});"
+          new="    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',discoverySource:r.spotifyPrimary?'Spotify':'Web',spotifyPrimary:!!r.spotifyPrimary,...base,score:clamp(base.score+(r.spotifyPrimary?8:0)),confidence:clamp(base.confidence+(r.spotifyPrimary?8:0))});"
+          if old not in s: raise SystemExit('candidate map marker missing')
+          s=s.replace(old,new,1)
+
+          old="  const enginesUsed=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None').concat(googleUsed?['Google']:[]));"
+          new="  const enginesUsed=unique((spotifyPrimary.length?['Spotify']:[]).concat(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None')).concat(googleUsed?['Google']:[]));"
+          if old not in s: raise SystemExit('enginesUsed marker missing')
+          s=s.replace(old,new,1)
+
+          old="  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,candidates,providers:providerStatus(env),enginesUsed,failoverPaths};"
+          new="  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,spotifyConfigured:!!env.SPOTIFY_CLIENT_ID&&!!env.SPOTIFY_CLIENT_SECRET,spotifyPrimaryCount:spotifyPrimary.length,googleUsed,candidates,providers:providerStatus(env),enginesUsed,failoverPaths};"
+          if old not in s: raise SystemExit('discoverBase return marker missing')
+          s=s.replace(old,new,1)
+
+          if "const VERSION = 'RADAR v0.4.7.12 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.12 Cloud';","const VERSION = 'RADAR v0.4.7.13 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.12</div>','<div class="version">v0.4.7.13</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.12 Cloud" worker.js
+          grep -q "RADAR v0.4.7.13 Cloud" worker.js
+          grep -q "spotifySearchPlaylists" worker.js
+          grep -q "type','playlist" worker.js
+          grep -q "market',market" worker.js
+          grep -q "spotifyPrimaryCount" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
-          grep -q "spotifyOwnerVerified" worker.js
-          grep -q '<div class="version">v0.4.7.12</div>' worker.js
+          grep -q "BRAVE_API_KEY" worker.js
+          grep -q "TAVILY_API_KEY" worker.js
+          grep -q "SERPAPI_KEY" worker.js
+          grep -q '<div class="version">v0.4.7.13</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.12 Spotify owner verification" || exit 0
+          git commit -m "RADAR v0.4.7.13 Spotify Search primary" || exit 0
           git push
