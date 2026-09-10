@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.23
+name: RADAR v0.4.7.24
 on:
   push:
     paths:
@@ -10,32 +10,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fix priority button click
+      - name: Upgrade smart outreach composer
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old="+(outreachPriority(r)?'<button class=\"outreachPriority '+outreachPriority(r).cls+'\" data-priority-index=\"'+i+'\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
-          new="+(outreachPriority(r)?'<button type=\"button\" class=\"outreachPriority '+outreachPriority(r).cls+'\" data-priority-index=\"'+i+'\" onclick=\"priorityOutreach(sortedFilteredResults()[Number(this.dataset.priorityIndex)])\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
-          if old not in s: raise SystemExit('priority button marker mismatch')
-          s=s.replace(old,new,1)
-          old_listener="document.addEventListener('click',e=>{\n  const priority=e.target.closest('[data-priority-index]');\n  if(priority){\n    const shown=sortedFilteredResults();\n    priorityOutreach(shown[Number(priority.dataset.priorityIndex)]);\n    return;\n  }"
-          if old_listener in s:
-            s=s.replace(old_listener,"document.addEventListener('click',e=>{",1)
-          if "const VERSION = 'RADAR v0.4.7.22 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.22 Cloud';","const VERSION = 'RADAR v0.4.7.23 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.22</div>','<div class="version">v0.4.7.23</div>',1)
+          old_subject='<input id="mailSubject" value="Music submission for {{playlist}}" />'
+          new_subject='<input id="mailSubject" value="Track submission — {{track}} for {{playlist}}" />'
+          if old_subject not in s: raise SystemExit('subject marker mismatch')
+          s=s.replace(old_subject,new_subject,1)
+          old_body="""<textarea id=\"mailBody\">Hi {{curator}},
+
+I’m {{artist}} and I’d love to submit my track {{track}} for consideration on {{playlist}}.
+
+Listen here: {{spotify_link}}
+
+Thank you for your time.</textarea>"""
+          new_body="""<textarea id=\"mailBody\">Hi {{curator}},
+
+I’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.
+
+Here’s the track: {{spotify_link}}
+
+Thanks for listening,
+{{artist}}</textarea>"""
+          if old_body not in s: raise SystemExit('message marker mismatch')
+          s=s.replace(old_body,new_body,1)
+          old_css='.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.5}'
+          new_css='.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}'
+          if old_css not in s: raise SystemExit('composer css marker mismatch')
+          s=s.replace(old_css,new_css,1)
+          old_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients()});"
+          new_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
+          if old_open not in s: raise SystemExit('open composer marker mismatch')
+          s=s.replace(old_open,new_open,1)
+          if "const VERSION = 'RADAR v0.4.7.23 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.23 Cloud';","const VERSION = 'RADAR v0.4.7.24 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.23</div>','<div class="version">v0.4.7.24</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.23 Cloud" worker.js
+          grep -q "RADAR v0.4.7.24 Cloud" worker.js
+          grep -q "Track submission — {{track}} for {{playlist}}" worker.js
+          grep -q "could be a good fit for your audience" worker.js
+          grep -q "font-family:Inter,ui-sans-serif,system-ui" worker.js
+          grep -q "font-size:15px" worker.js
           grep -q "onclick=\\\"priorityOutreach" worker.js
           grep -q "function priorityOutreach" worker.js
-          grep -q "selectedOutreach.set" worker.js
-          grep -q "outreachPriority" worker.js
           grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
           grep -q "Promise.all(candidates.map" worker.js
           grep -q "spotifySearchPlaylists" worker.js
@@ -43,11 +67,11 @@ jobs:
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.23</div>' worker.js
+          grep -q '<div class="version">v0.4.7.24</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.23 direct outreach click" || exit 0
+          git commit -m "RADAR v0.4.7.24 smart outreach composer" || exit 0
           git push
