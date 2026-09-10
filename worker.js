@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.7 Cloud';
+const VERSION = 'RADAR v0.4.7.8 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -430,28 +430,40 @@ function guessCuratorName(playlistName,results){
   const rejectDate=/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+\d{1,2}\b|\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b|\b20\d{2}\b/i;
   const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/^[\s:|·–—-]+|[\s:|·–—-]+$/g,'').replace(/\s+/g,' ').trim();
   const valid=name=>{
-    const n=normalize(name);
-    if(name.length<2||name.length>48)return false;
+    const n=normalize(name),words=name.split(/\s+/).filter(Boolean);
+    if(name.length<2||name.length>48||words.length>5)return false;
     if(rejectExact.test(name)||rejectWords.test(name)||rejectDate.test(name))return false;
     if(n===p||/@|https?:|www\./i.test(name)||/^\d+$/.test(name))return false;
     if(/[|·;] | [-–—] /.test(name))return false;
-    const words=name.split(/\s+/).filter(Boolean);
-    if(words.length>5)return false;
     if(words.length>=3&&/^(of|the|a|an|and|for|to|in|on|with|from)$/i.test(words[0]))return false;
     return true;
   };
-  const add=(name,score,row)=>{name=clean(name);if(valid(name))hits.push({name,score,row})};
+  const add=(name,row,explicit)=>{name=clean(name);if(valid(name))hits.push({name,row,explicit:!!explicit})};
   for(const r of rows){
     const title=String(r.title||'').replace(/<[^>]*>/g,' ').trim(),desc=String(r.description||'').replace(/<[^>]*>/g,' ').trim(),text=(title+' — '+desc).replace(/\s+/g,' ');let m;
-    const patterns=[/(?:playlist\s+)?curated\s+by\s+([A-Za-z0-9_.'’& ]{2,48})/i,/playlist\s+by\s+([A-Za-z0-9_.'’& ]{2,48})/i,/(?:playlist\s+)?curator\s*[:·–—-]\s*([A-Za-z0-9_.'’& ]{2,48})/i,/(?:owner|created\s+by)\s*[:·–—-]?\s*([A-Za-z0-9_.'’& ]{2,48})/i];
-    for(const rx of patterns)if((m=text.match(rx)))add(m[1],70,r);
-    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\s*[-–—|:]\s*(?:spotify\s+)?playlist\s+curator\b/i)))add(m[1],72,r);
-    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\s*[-–—|:]\s*(?:playlist\s+)?curator\b/i)))add(m[1],72,r);
+    const explicitPatterns=[/(?:playlist\s+)?curated\s+by\s+([A-Za-z0-9_.'’& ]{2,48})(?=\s*(?:[|·;,.()–—-]|$))/i,/playlist\s+by\s+([A-Za-z0-9_.'’& ]{2,48})(?=\s*(?:[|·;,.()–—-]|$))/i,/(?:playlist\s+)?curator\s*[:·–—-]\s*([A-Za-z0-9_.'’& ]{2,48})(?=\s*(?:[|·;,.()–—-]|$))/i,/(?:owner|created\s+by)\s*[:·–—-]?\s*([A-Za-z0-9_.'’& ]{2,48})(?=\s*(?:[|·;,.()–—-]|$))/i];
+    for(const rx of explicitPatterns)if((m=text.match(rx)))add(m[1],r,true);
+    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\s*[-–—|:]\s*(?:spotify\s+)?playlist\s+curator\b/i)))add(m[1],r,true);
+    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\s*[-–—|:]\s*(?:playlist\s+)?curator\b/i)))add(m[1],r,true);
   }
   if(!hits.length)return'';
-  for(const h of hits){const n=normalize(h.name),txt=normalize((h.row.title||'')+' '+(h.row.description||'')+' '+(h.row.url||''));if(p&&txt.includes(p))h.score+=15;if(/spotify|playlist/.test(txt))h.score+=5;if(rows.filter(r=>normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||'')).includes(n)).length>=2)h.score+=10}
-  hits.sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
-  return hits[0].score>=85?hits[0].name:'';
+  const groups=new Map();
+  for(const h of hits){
+    const key=normalize(h.name);
+    if(!groups.has(key))groups.set(key,{name:h.name,explicit:false,evidence:new Set(),playlistAssoc:false});
+    const g=groups.get(key);g.explicit=g.explicit||h.explicit;
+    const title=normalize(h.row.title||''),desc=normalize(h.row.description||''),url=normalize(h.row.url||'');
+    if(title.includes(key))g.evidence.add('title');
+    if(desc.includes(key))g.evidence.add('description');
+    if(url.includes(key.replace(/\s+/g,''))||url.includes(key.replace(/\s+/g,'-')))g.evidence.add('url');
+    if(p&&(title.includes(p)||desc.includes(p)||url.includes(p)))g.playlistAssoc=true;
+  }
+  const ranked=[...groups.values()].map(g=>({
+    ...g,
+    corroborated:g.evidence.size>=2,
+    score:(g.explicit?100:0)+(g.evidence.size*20)+(g.playlistAssoc?15:0)
+  })).filter(g=>(g.explicit&&g.playlistAssoc)||g.corroborated).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
+  return ranked.length?ranked[0].name:'';
 }
 function confidenceFromScore(n){return clamp(n,0,100)}
 function hostOf(url){try{return new URL(url).hostname.replace(/^www\./,'')}catch{return''}}
