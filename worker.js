@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.20 Cloud';
+const VERSION = 'RADAR v0.4.7.21 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.20</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.21</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -272,7 +272,12 @@ async function loadPlaylistCovers(items){
 
 function outreachPriority(r){
   const score=Number(r.opportunityScore||0);
-  const strongest=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));
+  const visibleConfidences=[];
+  if(r.email)visibleConfidences.push(Number(r.emailConfidence||0));
+  if(r.instagram)visibleConfidences.push(Number(r.instagramConfidence||0));
+  if(r.submission)visibleConfidences.push(Number(r.submissionConfidence||0));
+  if(r.site)visibleConfidences.push(Number(r.siteConfidence||0));
+  const strongest=visibleConfidences.length?Math.max(...visibleConfidences):0;
   if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};
   if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};
   return null;
