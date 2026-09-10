@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Prioritize exact Spotify evidence
+      - name: Apply Spotify evidence priority
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -18,34 +18,57 @@ jobs:
           s=p.read_text()
           start=s.index('function guessCuratorName(playlistName,results){')
           end=s.index('\nfunction confidenceFromScore',start)
-          old=s[start:end]
-          new=old
-          new=new.replace('function guessCuratorName(playlistName,results){','function guessCuratorName(playlistName,results,spotifyUrl){',1)
-          needle="const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];"
-          repl="const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];\n            const spotifyId=(String(spotifyUrl||'').match(/open\\.spotify\\.com\\/playlist\\/([A-Za-z0-9]+)/i)||[])[1]||'';"
-          if needle not in new: raise SystemExit('curator header marker not found')
-          new=new.replace(needle,repl,1)
-          needle2="const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row)})};"
-          repl2="const exactSpotifyRow=r=>{const u=String(r.url||'');return !!spotifyId&&new RegExp('open\\\\.spotify\\\\.com/playlist/'+spotifyId,'i').test(u)};\n            const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row),spotifyExact:exactSpotifyRow(row)})};"
-          if needle2 not in new: raise SystemExit('curator add marker not found')
-          new=new.replace(needle2,repl2,1)
-          needle3="if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,sources:new Set(),playlistSources:new Set()});"
-          repl3="if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,spotifyExact:false,sources:new Set(),playlistSources:new Set()});"
-          if needle3 not in new: raise SystemExit('group marker not found')
-          new=new.replace(needle3,repl3,1)
-          needle4="const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.sources.add(h.source);"
-          repl4="const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.spotifyExact=g.spotifyExact||h.spotifyExact;g.sources.add(h.source);"
-          if needle4 not in new: raise SystemExit('group accumulation marker not found')
-          new=new.replace(needle4,repl4,1)
-          old_rank="score:(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)\n            })).filter(g=>(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"
-          new_rank="score:(g.spotifyExact?220:0)+(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)\n            })).filter(g=>(g.spotifyExact&&g.strongTitle)||(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"
-          if old_rank not in new: raise SystemExit('rank marker not found')
-          new=new.replace(old_rank,new_rank,1)
+          new="""function guessCuratorName(playlistName,results,spotifyUrl){
+  const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];
+  const spotifyId=(String(spotifyUrl||'').match(/open\\.spotify\\.com\\/playlist\\/([A-Za-z0-9]+)/i)||[])[1]||'';
+  const rejectExact=/^(spotify|playlist|playlists|curator|music|official|contact|submit|submission|instagram|facebook|youtube|tiktok|soundcloud|various artists)$/i;
+  const rejectWords=/\\b(playlist|playli\\s*t|spotify|curator|submission|submit|contact|official|followers?|tracks?|songs?|updated|listen|music)\\b/i;
+  const rejectDate=/\\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\\s+\\d{1,2}\\b|\\b\\d{1,2}[\\/.-]\\d{1,2}(?:[\\/.-]\\d{2,4})?\\b|\\b20\\d{2}\\b/i;
+  const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/^[\\s:|·–—-]+|[\\s:|·–—-]+$/g,'').replace(/\\s+/g,' ').trim();
+  const valid=name=>{
+    const n=normalize(name),words=name.split(/\\s+/).filter(Boolean);
+    if(name.length<2||name.length>48||words.length>5)return false;
+    if(rejectExact.test(name)||rejectWords.test(name)||rejectDate.test(name))return false;
+    if(n===p||/@|https?:|www\\./i.test(name)||/^\\d+$/.test(name))return false;
+    if(/[|·;] | [-–—] /.test(name))return false;
+    if(words.length>=3&&/^(of|the|a|an|and|for|to|in|on|with|from)$/i.test(words[0]))return false;
+    if(words.length>=2&&words.some(w=>w.length===1))return false;
+    return true;
+  };
+  const sourceKey=r=>{const h=hostOf(r.url||'');return h||String(r.url||'')||normalize(r.title||'')};
+  const exactSpotifyRow=r=>!!spotifyId&&new RegExp('open\\\\.spotify\\\\.com/playlist/'+spotifyId,'i').test(String(r.url||''));
+  const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row),spotifyExact:exactSpotifyRow(row)})};
+  for(const r of rows){
+    const title=String(r.title||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim();
+    const desc=String(r.description||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim();
+    let m;
+    const titlePatterns=[/(?:playlist\\s+)?curated\\s+by\\s+([A-Za-z0-9_.'’& ]{2,48})(?=\\s*(?:[|·;,.()–—-]|$))/i,/playlist\\s+by\\s+([A-Za-z0-9_.'’& ]{2,48})(?=\\s*(?:[|·;,.()–—-]|$))/i,/(?:playlist\\s+)?curator\\s*[:·–—-]\\s*([A-Za-z0-9_.'’& ]{2,48})(?=\\s*(?:[|·;,.()–—-]|$))/i,/(?:owner|created\\s+by)\\s*[:·–—-]?\\s*([A-Za-z0-9_.'’& ]{2,48})(?=\\s*(?:[|·;,.()–—-]|$))/i];
+    for(const rx of titlePatterns)if((m=title.match(rx)))add(m[1],r,true);
+    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\\s*[-–—|:]\\s*(?:spotify\\s+)?playlist\\s+curator\\b/i)))add(m[1],r,true);
+    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\\s*[-–—|:]\\s*(?:playlist\\s+)?curator\\b/i)))add(m[1],r,true);
+    for(const rx of titlePatterns)if((m=desc.match(rx)))add(m[1],r,false);
+  }
+  if(!hits.length)return'';
+  const groups=new Map();
+  for(const h of hits){
+    const key=normalize(h.name);
+    if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,spotifyExact:false,sources:new Set(),playlistSources:new Set()});
+    const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.spotifyExact=g.spotifyExact||h.spotifyExact;g.sources.add(h.source);
+    const txt=normalize((h.row.title||'')+' '+(h.row.description||'')+' '+(h.row.url||''));
+    if(p&&txt.includes(p))g.playlistSources.add(h.source);
+  }
+  const ranked=[...groups.values()].map(g=>({
+    ...g,
+    independent:g.sources.size>=2,
+    associated:g.playlistSources.size>=1,
+    score:(g.spotifyExact?220:0)+(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)
+  })).filter(g=>(g.spotifyExact&&g.strongTitle)||(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
+  return ranked.length?ranked[0].name:'';
+}"""
           s=s[:start]+new+s[end:]
-          call_old='curator:guessCuratorName(c.name,results),searchSources:'
-          call_new='curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:'
-          if call_old not in s: raise SystemExit('deep contact curator call not found')
-          s=s.replace(call_old,call_new,1)
+          old_call='curator:guessCuratorName(c.name,results),searchSources:'
+          if old_call not in s: raise SystemExit('deep contact curator call not found')
+          s=s.replace(old_call,'curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:',1)
           old_version="const VERSION = 'RADAR v0.4.7.10 Cloud';"
           if old_version not in s: raise SystemExit('version marker not found')
           s=s.replace(old_version,"const VERSION = 'RADAR v0.4.7.11 Cloud';",1)
