@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.6 Cloud';
+const VERSION = 'RADAR v0.4.7.7 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -425,20 +425,33 @@ function isSubmissionUrl(url){const s=normalize(url);return /(submit|submission|
 function extractSubmissionUrl(results){for(const r of results){if(isSubmissionUrl(r.url))return r.url;const extras=r.profile?.long_name?[r.profile.long_name]:[];for(const x of extras)if(isSubmissionUrl(x))return x}return''}
 function guessCuratorName(playlistName,results){
   const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];
-  const reject=/^(spotify|playlist|playlists|curator|music|official|contact|submit|submission|instagram|facebook|youtube|tiktok|soundcloud|various artists)$/i;
-  const clean=v=>String(v||'').replace(/^[\s:|·–—-]+|[\s:|·–—-]+$/g,'').replace(/\s+/g,' ').trim();
-  const add=(name,score,row)=>{name=clean(name);const n=normalize(name);if(name.length>=2&&name.length<=80&&!reject.test(name)&&n!==p&&!/@|https?:|www\./i.test(name)&&!/^\d+$/.test(name))hits.push({name,score,row})};
+  const rejectExact=/^(spotify|playlist|playlists|curator|music|official|contact|submit|submission|instagram|facebook|youtube|tiktok|soundcloud|various artists)$/i;
+  const rejectWords=/\b(playlist|playli\s*t|spotify|curator|submission|submit|contact|official|followers?|tracks?|songs?|updated|listen|music)\b/i;
+  const rejectDate=/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+\d{1,2}\b|\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b|\b20\d{2}\b/i;
+  const clean=v=>String(v||'').replace(/<[^>]*>/g,' ').replace(/^[\s:|·–—-]+|[\s:|·–—-]+$/g,'').replace(/\s+/g,' ').trim();
+  const valid=name=>{
+    const n=normalize(name);
+    if(name.length<2||name.length>48)return false;
+    if(rejectExact.test(name)||rejectWords.test(name)||rejectDate.test(name))return false;
+    if(n===p||/@|https?:|www\./i.test(name)||/^\d+$/.test(name))return false;
+    if(/[|·;] | [-–—] /.test(name))return false;
+    const words=name.split(/\s+/).filter(Boolean);
+    if(words.length>5)return false;
+    if(words.length>=3&&/^(of|the|a|an|and|for|to|in|on|with|from)$/i.test(words[0]))return false;
+    return true;
+  };
+  const add=(name,score,row)=>{name=clean(name);if(valid(name))hits.push({name,score,row})};
   for(const r of rows){
     const title=String(r.title||'').replace(/<[^>]*>/g,' ').trim(),desc=String(r.description||'').replace(/<[^>]*>/g,' ').trim(),text=(title+' — '+desc).replace(/\s+/g,' ');let m;
-    const patterns=[/(?:playlist\s+)?curated\s+by\s+([^|·;,.()]{2,80})/i,/playlist\s+by\s+([^|·;,.()]{2,80})/i,/(?:playlist\s+)?curator\s*[:·–—-]\s*([^|·;,.()]{2,80})/i,/(?:owner|created\s+by)\s*[:·–—-]?\s*([^|·;,.()]{2,80})/i];
+    const patterns=[/(?:playlist\s+)?curated\s+by\s+([A-Za-z0-9_.'’& ]{2,48})/i,/playlist\s+by\s+([A-Za-z0-9_.'’& ]{2,48})/i,/(?:playlist\s+)?curator\s*[:·–—-]\s*([A-Za-z0-9_.'’& ]{2,48})/i,/(?:owner|created\s+by)\s*[:·–—-]?\s*([A-Za-z0-9_.'’& ]{2,48})/i];
     for(const rx of patterns)if((m=text.match(rx)))add(m[1],70,r);
-    if((m=title.match(/^(.{2,80}?)\s*[-–—|:]\s*(?:spotify\s+)?playlist\s+curator\b/i)))add(m[1],72,r);
-    if((m=title.match(/^(.{2,80}?)\s*[-–—|:]\s*(?:playlist\s+)?curator\b/i)))add(m[1],72,r);
+    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\s*[-–—|:]\s*(?:spotify\s+)?playlist\s+curator\b/i)))add(m[1],72,r);
+    if((m=title.match(/^([A-Za-z0-9_.'’& ]{2,48}?)\s*[-–—|:]\s*(?:playlist\s+)?curator\b/i)))add(m[1],72,r);
   }
   if(!hits.length)return'';
   for(const h of hits){const n=normalize(h.name),txt=normalize((h.row.title||'')+' '+(h.row.description||'')+' '+(h.row.url||''));if(p&&txt.includes(p))h.score+=15;if(/spotify|playlist/.test(txt))h.score+=5;if(rows.filter(r=>normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||'')).includes(n)).length>=2)h.score+=10}
   hits.sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
-  return hits[0].score>=75?hits[0].name:'';
+  return hits[0].score>=85?hits[0].name:'';
 }
 function confidenceFromScore(n){return clamp(n,0,100)}
 function hostOf(url){try{return new URL(url).hostname.replace(/^www\./,'')}catch{return''}}
