@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.17 Cloud';
+const VERSION = 'RADAR v0.4.7.18 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.17</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.18</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -775,14 +775,10 @@ async function discoverBase(input,env){
 async function enrichContactBatch(input,env){
   if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,googleUsed:0,results:[]};
   const candidates=Array.isArray(input.candidates)?input.candidates.slice(0,3):[];
-  let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
-  let googleUsed=0;
-  const results=[];
-  for(const c of candidates){
-    const pack=await deepContactForCandidate(c,input,env,slots>0);
-    results.push(pack.result);
-    if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}
-  }
+  const slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
+  const packs=await Promise.all(candidates.map((c,i)=>deepContactForCandidate(c,input,env,i<slots)));
+  const results=packs.map(pack=>pack.result);
+  const googleUsed=packs.reduce((n,pack)=>n+Number(pack.googleUsed||0),0);
   return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};
 }
 
