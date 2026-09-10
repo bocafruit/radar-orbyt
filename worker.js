@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.25 Cloud';
+const VERSION = 'RADAR v0.4.7.24 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -38,7 +38,7 @@ const HTML = `<!doctype html>
 .composerOverlay{position:fixed;inset:0;z-index:80;background:rgba(3,5,12,.78);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:16px}
 .composerOverlay.open{display:flex}.composer{width:min(760px,100%);max-height:92vh;overflow:auto;border:1px solid #303a62;background:linear-gradient(180deg,#11162a,#080c18);border-radius:22px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.5)}
 .composerHead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.composerHead h3{margin:0;font-size:19px}.composerSub{font-size:11px;color:var(--muted);margin-top:5px}.closeComposer{width:34px;height:34px;border-radius:10px;border:1px solid #30385f;background:#151b31;color:#fff;font-size:19px;cursor:pointer}
-.composeGrid{display:grid;gap:10px;margin-top:15px}.composeGrid label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}.personalizedHint{margin-top:7px;font-size:10px;color:var(--green);letter-spacing:.02em}
+.composeGrid{display:grid;gap:10px;margin-top:15px}.composeGrid label{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}
 .tokenRow{display:flex;gap:6px;flex-wrap:wrap}.token{border:1px solid #30385f;background:#12182c;color:#bdc7e9;border-radius:999px;padding:6px 8px;font-size:9px;cursor:pointer}
 .recipientList{display:grid;gap:7px;margin-top:12px}.recipient{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 10px;border:1px solid #232b4b;background:#0b1020;border-radius:11px}.recipient strong{font-size:11px;display:block}.recipient small{font-size:9px;color:var(--muted);display:block;margin-top:2px}.recipientActions{display:flex;gap:6px}.recipientRemove{border:1px solid #3d3654;background:#171225;color:#ffc0d0;border-radius:8px;padding:7px 8px;font-size:9px;cursor:pointer}
 .composeActions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:15px}.sendHint{font-size:9px;color:var(--muted);margin-top:10px;line-height:1.45}
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.25</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.24</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -88,14 +88,14 @@ const HTML = `<!doctype html>
 <div class="resultsHead"><div><h2 id="resultsTitle" data-i18n="resultsTitle">Playlist contattabili</h2><span class="count" id="count">0 risultati</span></div><div class="resultsTools"><select id="sortResults" class="sortSelect"><option value="contact-desc" data-i18n="sortContactDesc">Contattabilità ↓</option><option value="contact-asc" data-i18n="sortContactAsc">Contattabilità ↑</option><option value="match-desc" data-i18n="sortMatchDesc">Match ↓</option><option value="match-asc" data-i18n="sortMatchAsc">Match ↑</option><option value="confidence-desc" data-i18n="sortConfDesc">Confidenza ↓</option><option value="confidence-asc" data-i18n="sortConfAsc">Confidenza ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select><button class="filterChip" data-filter="email">Email</button><button class="filterChip" data-filter="instagram">Instagram</button><button class="filterChip" data-filter="submission">Submission</button></div></div>
 <div id="results" class="cards"><div class="empty">Imposta il genere e avvia RADAR. Contact-First mostra prima le playlist con almeno un canale pubblico utile: email, Instagram o submission.</div></div>
 <div class="outreachBar" id="outreachBar"><div><div class="outreachCount"><span id="selectedCount">0</span> <span data-i18n="selected">selezionati</span></div><div class="outreachMini" data-i18n="outreachMini">Crea un unico format e personalizzalo per ogni curatore.</div></div><button class="btn" id="openComposer" data-i18n="prepareOutreach">Prepara outreach</button></div>
-<div class="composerOverlay" id="composerOverlay"><section class="composer"><div class="composerHead"><div><h3 data-i18n="composerTitle">Outreach Builder</h3><div class="composerSub" data-i18n="composerSub">Un template, email individuali e personalizzate.</div></div><button class="closeComposer" id="closeComposer">×</button></div><div class="composeGrid"><div><label data-i18n="subjectLabel">Oggetto</label><input id="mailSubject" value="Track submission" /></div><div><label data-i18n="messageLabel">Messaggio</label><textarea id="mailBody">Hi,
+<div class="composerOverlay" id="composerOverlay"><section class="composer"><div class="composerHead"><div><h3 data-i18n="composerTitle">Outreach Builder</h3><div class="composerSub" data-i18n="composerSub">Un template, email individuali e personalizzate.</div></div><button class="closeComposer" id="closeComposer">×</button></div><div class="composeGrid"><div><label data-i18n="subjectLabel">Oggetto</label><input id="mailSubject" value="Track submission — {{track}} for {{playlist}}" /></div><div><label data-i18n="messageLabel">Messaggio</label><textarea id="mailBody">Hi {{curator}},
 
-I’m ORBYT. I came across your playlist and thought my track could be a good fit for your audience.
+I’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.
 
-Here’s the track:
+Here’s the track: {{spotify_link}}
 
 Thanks for listening,
-ORBYT</textarea><div class="personalizedHint">Personalizzato automaticamente per ogni curatore</div></div><div><label data-i18n="artistLabel">Artista</label><input id="senderArtist" value="ORBYT" /></div><div><label data-i18n="trackLabel">Brano</label><input id="senderTrack" placeholder="es. EUPHORIA" /></div><div><label data-i18n="trackLinkLabel">Link brano</label><input id="senderTrackLink" placeholder="https://open.spotify.com/track/..." /></div></div><div class="recipientList" id="recipientList"></div><div class="composeActions"><button class="btn secondary" id="clearSelection" data-i18n="clear">Svuota lista</button></div><div class="sendHint" data-i18n="sendHint">RADAR prepara email separate: nessun destinatario vede gli altri. In questa versione l’invio finale si apre nel client email del dispositivo; l’invio diretto batch verrà collegato a un provider email autorizzato.</div></section></div>
+{{artist}}</textarea></div><div><label data-i18n="variables">Variabili rapide</label><div class="tokenRow"><button class="token" data-token="{{curator}}">{{curator}}</button><button class="token" data-token="{{playlist}}">{{playlist}}</button><button class="token" data-token="{{artist}}">{{artist}}</button><button class="token" data-token="{{track}}">{{track}}</button><button class="token" data-token="{{spotify_link}}">{{spotify_link}}</button></div></div><div><label data-i18n="artistLabel">Artista</label><input id="senderArtist" value="ORBYT" /></div><div><label data-i18n="trackLabel">Brano</label><input id="senderTrack" placeholder="es. EUPHORIA" /></div><div><label data-i18n="trackLinkLabel">Link brano</label><input id="senderTrackLink" placeholder="https://open.spotify.com/track/..." /></div></div><div class="recipientList" id="recipientList"></div><div class="composeActions"><button class="btn secondary" id="clearSelection" data-i18n="clear">Svuota lista</button></div><div class="sendHint" data-i18n="sendHint">RADAR prepara email separate: nessun destinatario vede gli altri. In questa versione l’invio finale si apre nel client email del dispositivo; l’invio diretto batch verrà collegato a un provider email autorizzato.</div></section></div>
 <footer class="legalFooter"><div class="legalNote" id="legalText"><strong>RADAR</strong> utilizza informazioni disponibili pubblicamente sul web per aiutare a individuare playlist e canali di contatto. I dati possono essere incompleti, non aggiornati o attribuiti in modo errato: verifica sempre le informazioni prima di utilizzarle. RADAR non è affiliato a Spotify, Google, Brave o alle piattaforme mostrate.</div><div class="legalLinks"><button type="button">Privacy</button><button type="button">Terms</button><button type="button">Data Sources</button><button type="button">Contact / Removal Request</button></div></footer>
 </main>
 <script>
@@ -319,23 +319,18 @@ function toggleRecipient(email){
   paintResults(sortedFilteredResults());
   updateOutreachBar();
 }
-function personalizedMail(r){
-  const curator=(r.curator||r.curatorName||'').trim() || 'there';
-  const artist=$('#senderArtist').value.trim()||'ORBYT';
-  const track=$('#senderTrack').value.trim();
-  const link=$('#senderTrackLink').value.trim();
-  const playlist=String(r.name||'').trim();
-  const subject=track&&playlist?'Track submission — '+track+' for '+playlist:track?'Track submission — '+track:playlist?'Track submission for '+playlist:'Track submission';
-  const body='Hi '+curator+',\n\nI’m '+artist+'. I came across '+(playlist||'your playlist')+' and thought '+(track||'my track')+' could be a good fit for your audience.\n\n'+(link?'Here’s the track: '+link+'\n\n':'')+'Thanks for listening,\n'+artist;
-  return{subject,body};
-}
-function refreshComposerPreview(){
-  const r=[...selectedOutreach.values()][0];if(!r)return;
-  const m=personalizedMail(r);$('#mailSubject').value=m.subject;$('#mailBody').value=m.body;
+function fillTemplate(str,r){
+  const curator=(r.curator||r.curatorName||'').trim() || t('curatorFallback');
+  return String(str||'')
+    .replaceAll('{{curator}}',curator)
+    .replaceAll('{{playlist}}',r.name||'')
+    .replaceAll('{{artist}}',$('#senderArtist').value.trim())
+    .replaceAll('{{track}}',$('#senderTrack').value.trim())
+    .replaceAll('{{spotify_link}}',$('#senderTrackLink').value.trim());
 }
 function mailtoFor(r){
-  const m=personalizedMail(r);
-  return 'mailto:'+encodeURIComponent(r.email)+'?subject='+encodeURIComponent(m.subject)+'&body='+encodeURIComponent(m.body);
+  const s=fillTemplate($('#mailSubject').value,r),b=fillTemplate($('#mailBody').value,r);
+  return 'mailto:'+encodeURIComponent(r.email)+'?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(b);
 }
 function renderRecipients(){
   const box=$('#recipientList'); if(!box)return;
@@ -445,12 +440,12 @@ document.addEventListener('click',e=>{
   const add=e.target.closest('[data-select-email]'); if(add){toggleRecipient(add.dataset.selectEmail);return}
   const rm=e.target.closest('[data-remove-email]'); if(rm){selectedOutreach.delete(String(rm.dataset.removeEmail).toLowerCase());paintResults(sortedFilteredResults());updateOutreachBar();return}
 });
-$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');refreshComposerPreview();renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});
+$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});
 $('#closeComposer').addEventListener('click',()=>$('#composerOverlay').classList.remove('open'));
 $('#composerOverlay').addEventListener('click',e=>{if(e.target.id==='composerOverlay')$('#composerOverlay').classList.remove('open')});
 $('#clearSelection').addEventListener('click',()=>{selectedOutreach.clear();paintResults(sortedFilteredResults());updateOutreachBar();$('#composerOverlay').classList.remove('open')});
 document.querySelectorAll('.token').forEach(b=>b.addEventListener('click',()=>{const ta=$('#mailBody'),tok=b.dataset.token;const a=ta.selectionStart||ta.value.length,c=ta.selectionEnd||a;ta.value=ta.value.slice(0,a)+tok+ta.value.slice(c);ta.focus();ta.selectionStart=ta.selectionEnd=a+tok.length}));
-['senderArtist','senderTrack','senderTrackLink'].forEach(id=>$('#'+id)?.addEventListener('input',()=>{refreshComposerPreview();renderRecipients()}));
+['mailSubject','mailBody','senderArtist','senderTrack','senderTrackLink'].forEach(id=>$('#'+id)?.addEventListener('input',renderRecipients));
 applyLanguage();updateClock();setInterval(updateClock,30000);
 
 </script></body></html>`;
