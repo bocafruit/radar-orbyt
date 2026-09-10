@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7 Cloud';
+const VERSION = 'RADAR v0.4.7.1 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -67,12 +67,10 @@ const HTML = `<!doctype html>
 .spotifyIcon{width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-right:5px}
 @media(max-width:560px){.brand h1{font-size:27px}.dateClock{min-width:76px;padding:6px}.dateClock .clockDate{font-size:7px}.dateClock .clockTime{font-size:10px}}
 
-/* v0.4.7 telemetry */
-#status{line-height:1.45;white-space:normal}
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.1</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -118,14 +116,12 @@ let selectedOutreach=new Map();
 function keyFor(r){return String(r.email||'').toLowerCase()}
 
 function cleanPlaylistName(raw){
-  let s=String(raw||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/\s+/g,' ').trim();
-  s=s.replace(/\s*\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission|Free Submission)\].*$/i,'');
-  s=s.replace(/\s*\((?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission|Free Submission)\).*$/i,'');
-  s=s.replace(/\s*[\|\u2022]\s*(?:Soundplate(?:\.com)?|SubmitHub|Groover|Daily Playlists|Spotify).*$/i,'');
-  s=s.replace(/\s*[-–—:]\s*playlist\s+by\s+.+$/i,'');
-  s=s.replace(/\s*[-–—:]\s*(?:Spotify\s+)?playlist\s*$/i,'');
-  s=s.replace(/\s*[-–—:]\s*(?:submit|submission|send us|send your|pitch your)\b.*$/i,'');
-  s=s.replace(/\s*[\|\u2022\-–—:]+\s*$/,'').trim();
+  let s=String(raw||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+  s=s.replace(/\s*[\|\u2022]\s*(Soundplate(?:\.com)?|Spotify|SubmitHub|Groover|Daily Playlists).*$/i,'');
+  s=s.replace(/\s*[-:]\s*Spotify Playlist.*$/i,'');
+  s=s.replace(/\s*\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission)\].*$/i,'');
+  s=s.replace(/\s*\((?:Submit Music Here|Submit(?: Your)? Music)\).*$/i,'');
+  s=s.replace(/\s*[\|\u2022]\s*$/,'').trim();
   return s||String(raw||'');
 }
 function spotifySvg(){
@@ -289,15 +285,13 @@ function scanUpdate(pct,title,msg,stats={}){pct=Math.max(4,Math.min(100,Math.rou
 function scanFinish(title,msg,stats={}){scanUpdate(100,title,msg,stats);clearInterval(scanClock);scanClock=null;setTimeout(()=>$('#scanPanel').classList.remove('active'),1800);}
 function scanError(msg){clearInterval(scanClock);scanClock=null;scanUpdate(100,t('scanInterrupted'),msg);$('#scanEngine').textContent=t('checkEngines');}
 
-let scanEngines=new Set(),scanFailoverPaths=new Set();
-
 async function discover(){
   const b=$('#discover');b.disabled=true;
   const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
   let googleUsed=0;
   const googleMax=payload.mode==='complete'?6:3;
   try{
-    scanEngines=new Set();scanFailoverPaths=new Set();
+    window.__radarEngines=new Set();window.__radarFailovers=new Set();
     scanStart();
     $('#results').innerHTML='<div class="empty">'+t('phase1')+'</div>';
     $('#status').textContent=t('discoveryStatus');
@@ -305,8 +299,8 @@ async function discover(){
     const base=await baseRes.json();
     if(!baseRes.ok)throw new Error(base.error||t('discoveryError'));
     const candidates=base.candidates||[];
-    (base.enginesUsed||[]).forEach(x=>scanEngines.add(x));
-    (base.failoverPaths||[]).forEach(x=>scanFailoverPaths.add(x));
+    (base.enginesUsed||[]).forEach(x=>window.__radarEngines.add(x));
+    (base.failoverPaths||[]).forEach(x=>window.__radarFailovers.add(x));
     googleUsed+=Number(base.googleUsed||0);
     scanUpdate(22,t('candidatesFound'),t('verifyContacts'),{candidates:candidates.length,checked:0,contacts:0,google:googleUsed});
     $('#count').textContent=candidates.length+' '+t('candidates');
@@ -334,7 +328,6 @@ async function discover(){
       const ed=await er.json();
       if(!er.ok)throw new Error(ed.error||t('contactError'));
       googleUsed+=Number(ed.googleUsed||0);
-      (ed.enginesUsed||[]).forEach(x=>scanEngines.add(x));
       final.push(...(ed.results||[]));
       const contactCount=final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).length;
       const pct=22+Math.round((done/candidates.length)*68);
@@ -344,8 +337,8 @@ async function discover(){
     const useful=final.filter(r=>r.contactability>=30&&(r.email||r.instagram||r.submission||r.site)).sort((a,b)=>b.radarScore-a.radarScore);
     render(useful);
     scanFinish(t('scanComplete'),useful.length+' '+t('contactableFound'),{candidates:candidates.length,checked:candidates.length,contacts:useful.length,google:googleUsed});
-    const engineText=[...scanEngines].join(' + ')||'—';
-    const failText=[...scanFailoverPaths][0]||'';
+    const engineText=[...window.__radarEngines].join(' + ')||'—';
+    const failText=[...window.__radarFailovers][0]||'';
     $('#status').textContent=useful.length+' '+t('contactable')+' · Motori: '+engineText+(failText?' · Failover '+failText:'')+' · Google '+googleUsed+'/'+googleMax;
   }catch(e){
     scanError(e.message);
@@ -637,8 +630,7 @@ async function enrichContactBatch(input,env){
     results.push(pack.result);
     if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}
   }
-  const enginesUsed=unique(results.flatMap(x=>String(x.searchSources||'').split(' + ')).filter(x=>x&&x!=='Search'));
-  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env),enginesUsed};
+  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};
 }
 
 async function discover(input,env){
