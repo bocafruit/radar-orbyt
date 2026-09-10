@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.17
+name: RADAR v0.4.7.18
 'on':
   push:
     paths:
@@ -10,35 +10,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add opportunity score
+      - name: Parallelize contact enrichment
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          changes=[
-            ("  let score=clamp(r.match*.32+r.contactability*.40+r.activity*.10+r.confidence*.18);","  const bestContactConfidence=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));\n  const opportunityScore=clamp(Math.round(Number(r.match||0)*.30+Number(r.contactability||0)*.25+bestContactConfidence*.25+(r.spotifyOwnerVerified?15:0)+(r.spotifyPrimary?5:0)));\n  let score=clamp(r.match*.32+r.contactability*.40+r.activity*.10+r.confidence*.18);"),
-            ("  return{...r,score,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};","  return{...r,score,opportunityScore,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};"),
-            ("    if(s==='contact-desc')return n(y.contactability)-n(x.contactability);","    if(s==='contact-desc')return n(y.opportunityScore)-n(x.opportunityScore)||n(y.contactability)-n(x.contactability);"),
-            ("    if(s==='contact-asc')return n(x.contactability)-n(y.contactability);","    if(s==='contact-asc')return n(x.opportunityScore)-n(y.opportunityScore)||n(x.contactability)-n(y.contactability);"),
-            ("+(displayPlaylistIdentity(r).curator?'<div class=\"curatorIdentity\"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+metaHtml(r)","+(displayPlaylistIdentity(r).curator?'<div class=\"curatorIdentity\"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+(r.opportunityScore!=null?'<div class=\"opportunityIdentity\"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+metaHtml(r)"),
-            (".curatorIdentity{",".opportunityIdentity{font-size:10px;color:var(--muted);margin-top:5px;letter-spacing:.05em}.opportunityIdentity b{color:var(--green)}.curatorIdentity{"),
-            ("const VERSION = 'RADAR v0.4.7.16 Cloud';","const VERSION = 'RADAR v0.4.7.17 Cloud';"),
-            ('<div class="version">v0.4.7.16</div>','<div class="version">v0.4.7.17</div>')
-          ]
-          for old,new in changes:
-            if old not in s: raise SystemExit('Expected marker missing: '+old[:120])
-            s=s.replace(old,new,1)
+          old="""  let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
+  let googleUsed=0;
+  const results=[];
+  for(const c of candidates){
+    const pack=await deepContactForCandidate(c,input,env,slots>0);
+    results.push(pack.result);
+    if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}
+  }
+  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"""
+          new="""  const slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
+  const packs=await Promise.all(candidates.map((c,i)=>deepContactForCandidate(c,input,env,i<slots)));
+  const results=packs.map(pack=>pack.result);
+  const googleUsed=packs.reduce((n,pack)=>n+Number(pack.googleUsed||0),0);
+  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"""
+          if old not in s: raise SystemExit('enrichContactBatch marker mismatch')
+          s=s.replace(old,new,1)
+          if "const VERSION = 'RADAR v0.4.7.17 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.17 Cloud';","const VERSION = 'RADAR v0.4.7.18 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.17</div>','<div class="version">v0.4.7.18</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.17 Cloud" worker.js
+          grep -q "RADAR v0.4.7.18 Cloud" worker.js
+          grep -q "Promise.all(candidates.map" worker.js
+          grep -q "packs.reduce" worker.js
           grep -q "opportunityScore" worker.js
-          grep -q "bestContactConfidence" worker.js
-          grep -q "spotifyOwnerVerified?15" worker.js
-          grep -q "opportunityIdentity" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
           grep -q "contactConfidenceBadge" worker.js
@@ -46,11 +51,11 @@ jobs:
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.17</div>' worker.js
+          grep -q '<div class="version">v0.4.7.18</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.17 opportunity score" || exit 0
+          git commit -m "RADAR v0.4.7.18 parallel contact enrichment" || exit 0
           git push
