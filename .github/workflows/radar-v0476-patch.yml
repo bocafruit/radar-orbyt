@@ -1,5 +1,5 @@
 name: RADAR v0.4.7.14
-on:
+'on':
   push:
     paths:
       - '.github/workflows/radar-v0476-patch.yml'
@@ -10,79 +10,52 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add owner-led contact verification
+      - name: Owner-led contact verification
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old="""async function deepContactForCandidate(c,input,env,allowGoogle=false){
-  const raw=String(c.name||'').replace(/\"/g,'').trim();
-  const genre=String(input.genre||'').replace(/\"/g,'').trim();
-  const queries=[
-    '\"'+raw+'\" Spotify playlist curator contact email Instagram',
-    '\"'+raw+'\" playlist submit music submission contact',
-    '\"'+raw+'\" playlist website curator '+(genre?'\"'+genre+'\"':'')
-  ];
-  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
-  let results=smartBatches.flatMap(x=>x.results);
-  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
-  let ev=contactEvidence(results,c.name);
-  let ct=contactabilityFromEvidence(ev);
-  let googleUsed=0;
-  if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
-    const googleQuery='\"'+raw+'\" Spotify playlist curator email Instagram submit music contact';
-    const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
-    if(googleResults.length){
-      results=results.concat(googleResults);
-      ev=contactEvidence(results,c.name);
-      ct=contactabilityFromEvidence(ev);
-    }
-    googleUsed=1;
-  }
-  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
-  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
-  const curator=spotify?.owner||webCurator;
-  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:spotify?.owner?'Spotify':'Web',spotifyOwnerVerified:!!spotify?.owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
-}"""
-          new="""async function deepContactForCandidate(c,input,env,allowGoogle=false){
-  const raw=String(c.name||'').replace(/\"/g,'').trim();
-  const genre=String(input.genre||'').replace(/\"/g,'').trim();
-  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
-  const owner=String(spotify?.owner||'').replace(/\"/g,'').trim();
-  const queries=owner?[
-    '\"'+owner+'\" \"'+raw+'\" Spotify playlist contact email Instagram',
-    '\"'+owner+'\" playlist submit music submission contact',
-    '\"'+owner+'\" \"'+raw+'\" website Instagram',
-    '\"'+raw+'\" Spotify playlist curator contact email submission'
-  ]:[
-    '\"'+raw+'\" Spotify playlist curator contact email Instagram',
-    '\"'+raw+'\" playlist submit music submission contact',
-    '\"'+raw+'\" playlist website curator '+(genre?'\"'+genre+'\"':'')
-  ];
-  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
-  let results=smartBatches.flatMap(x=>x.results);
-  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
-  let ev=contactEvidence(results,owner||c.name);
-  let ct=contactabilityFromEvidence(ev);
-  let googleUsed=0;
-  if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
-    const googleQuery=owner?'\"'+owner+'\" \"'+raw+'\" playlist email Instagram submit music contact':'\"'+raw+'\" Spotify playlist curator email Instagram submit music contact';
-    const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
-    if(googleResults.length){
-      results=results.concat(googleResults);
-      ev=contactEvidence(results,owner||c.name);
-      ct=contactabilityFromEvidence(ev);
-    }
-    googleUsed=1;
-  }
-  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
-  const curator=owner||webCurator;
-  const contactTarget=owner?'Spotify owner':'Playlist';
-  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:owner?'Spotify':'Web',contactTarget,spotifyOwnerVerified:!!owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
-}"""
-          if old not in s: raise SystemExit('deepContactForCandidate marker mismatch')
-          s=s.replace(old,new,1)
+          start=s.index('async function deepContactForCandidate(c,input,env,allowGoogle=false){')
+          end=s.index('\nasync function discoverBase(input,env){',start)
+          new='''async function deepContactForCandidate(c,input,env,allowGoogle=false){
+            const raw=String(c.name||'').replace(/"/g,'').trim();
+            const genre=String(input.genre||'').replace(/"/g,'').trim();
+            const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
+            const owner=String(spotify?.owner||'').replace(/"/g,'').trim();
+            const queries=owner?[
+              '"'+owner+'" "'+raw+'" Spotify playlist contact email Instagram',
+              '"'+owner+'" playlist submit music submission contact',
+              '"'+owner+'" "'+raw+'" website Instagram',
+              '"'+raw+'" Spotify playlist curator contact email submission'
+            ]:[
+              '"'+raw+'" Spotify playlist curator contact email Instagram',
+              '"'+raw+'" playlist submit music submission contact',
+              '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
+            ];
+            const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
+            let results=smartBatches.flatMap(x=>x.results);
+            const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
+            let ev=contactEvidence(results,owner||c.name);
+            let ct=contactabilityFromEvidence(ev);
+            let googleUsed=0;
+            if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
+              const googleQuery=owner?'"'+owner+'" "'+raw+'" playlist email Instagram submit music contact':'"'+raw+'" Spotify playlist curator email Instagram submit music contact';
+              const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
+              if(googleResults.length){
+                results=results.concat(googleResults);
+                ev=contactEvidence(results,owner||c.name);
+                ct=contactabilityFromEvidence(ev);
+              }
+              googleUsed=1;
+            }
+            const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
+            const curator=owner||webCurator;
+            const contactTarget=owner?'Spotify owner':'Playlist';
+            return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:owner?'Spotify':'Web',contactTarget,spotifyOwnerVerified:!!owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
+          }
+          '''
+          s=s[:start]+new+s[end:]
           if "const VERSION = 'RADAR v0.4.7.13 Cloud';" not in s: raise SystemExit('version marker missing')
           s=s.replace("const VERSION = 'RADAR v0.4.7.13 Cloud';","const VERSION = 'RADAR v0.4.7.14 Cloud';",1)
           s=s.replace('<div class="version">v0.4.7.13</div>','<div class="version">v0.4.7.14</div>',1)
