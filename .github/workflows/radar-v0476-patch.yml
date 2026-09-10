@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.24
+name: RADAR v0.4.7.25
 on:
   push:
     paths:
@@ -10,72 +10,61 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Upgrade smart outreach composer
+      - name: Clean outreach preview
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old_subject='<input id="mailSubject" value="Music submission for {{playlist}}" />'
-          new_subject='<input id="mailSubject" value="Track submission — {{track}} for {{playlist}}" />'
-          if old_subject not in s: raise SystemExit('subject marker mismatch')
-          s=s.replace(old_subject,new_subject,1)
-          old_body='\n'.join([
-            '<textarea id="mailBody">Hi {{curator}},',
-            '',
-            'I’m {{artist}} and I’d love to submit my track {{track}} for consideration on {{playlist}}.',
-            '',
-            'Listen here: {{spotify_link}}',
-            '',
-            'Thank you for your time.</textarea>'
-          ])
-          new_body='\n'.join([
-            '<textarea id="mailBody">Hi {{curator}},',
-            '',
-            'I’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.',
-            '',
-            'Here’s the track: {{spotify_link}}',
-            '',
-            'Thanks for listening,',
-            '{{artist}}</textarea>'
-          ])
-          if old_body not in s: raise SystemExit('message marker mismatch')
-          s=s.replace(old_body,new_body,1)
-          old_css='.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.5}'
-          new_css='.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}'
-          if old_css not in s: raise SystemExit('composer css marker mismatch')
-          s=s.replace(old_css,new_css,1)
-          old_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients()});"
-          new_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
-          if old_open not in s: raise SystemExit('open composer marker mismatch')
+          old='<div><label data-i18n="subjectLabel">Oggetto</label><input id="mailSubject" value="Track submission — {{track}} for {{playlist}}" /></div><div><label data-i18n="messageLabel">Messaggio</label><textarea id="mailBody">Hi {{curator}},\n\nI’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.\n\nHere’s the track: {{spotify_link}}\n\nThanks for listening,\n{{artist}}</textarea></div><div><label data-i18n="variables">Variabili rapide</label><div class="tokenRow"><button class="token" data-token="{{curator}}">{{curator}}</button><button class="token" data-token="{{playlist}}">{{playlist}}</button><button class="token" data-token="{{artist}}">{{artist}}</button><button class="token" data-token="{{track}}">{{track}}</button><button class="token" data-token="{{spotify_link}}">{{spotify_link}}</button></div></div>'
+          new='<div><label data-i18n="subjectLabel">Oggetto</label><input id="mailSubject" value="Track submission" /></div><div><label data-i18n="messageLabel">Messaggio</label><textarea id="mailBody">Hi,\n\nI’m ORBYT. I came across your playlist and thought my track could be a good fit for your audience.\n\nHere’s the track:\n\nThanks for listening,\nORBYT</textarea><div class="personalizedHint">Personalizzato automaticamente per ogni curatore</div></div>'
+          if old not in s: raise SystemExit('composer block mismatch')
+          s=s.replace(old,new,1)
+          old_fill="function fillTemplate(str,r){\n  const curator=(r.curator||r.curatorName||'').trim() || t('curatorFallback');\n  return String(str||'')\n    .replaceAll('{{curator}}',curator)\n    .replaceAll('{{playlist}}',r.name||'')\n    .replaceAll('{{artist}}',$('#senderArtist').value.trim())\n    .replaceAll('{{track}}',$('#senderTrack').value.trim())\n    .replaceAll('{{spotify_link}}',$('#senderTrackLink').value.trim());\n}"
+          new_fill="function personalizedMail(r){\n  const curator=(r.curator||r.curatorName||'').trim() || 'there';\n  const artist=$('#senderArtist').value.trim()||'ORBYT';\n  const track=$('#senderTrack').value.trim();\n  const link=$('#senderTrackLink').value.trim();\n  const playlist=String(r.name||'').trim();\n  const subject=track&&playlist?'Track submission — '+track+' for '+playlist:track?'Track submission — '+track:playlist?'Track submission for '+playlist:'Track submission';\n  const body='Hi '+curator+',\\n\\nI’m '+artist+'. I came across '+(playlist||'your playlist')+' and thought '+(track||'my track')+' could be a good fit for your audience.\\n\\n'+(link?'Here’s the track: '+link+'\\n\\n':'')+'Thanks for listening,\\n'+artist;\n  return{subject,body};\n}\nfunction refreshComposerPreview(){\n  const r=[...selectedOutreach.values()][0];if(!r)return;\n  const m=personalizedMail(r);$('#mailSubject').value=m.subject;$('#mailBody').value=m.body;\n}"
+          if old_fill not in s: raise SystemExit('fillTemplate mismatch')
+          s=s.replace(old_fill,new_fill,1)
+          old_mail="function mailtoFor(r){\n  const s=fillTemplate($('#mailSubject').value,r),b=fillTemplate($('#mailBody').value,r);\n  return 'mailto:'+encodeURIComponent(r.email)+'?subject='+encodeURIComponent(s)+'&body='+encodeURIComponent(b);\n}"
+          new_mail="function mailtoFor(r){\n  const m=personalizedMail(r);\n  return 'mailto:'+encodeURIComponent(r.email)+'?subject='+encodeURIComponent(m.subject)+'&body='+encodeURIComponent(m.body);\n}"
+          if old_mail not in s: raise SystemExit('mailto mismatch')
+          s=s.replace(old_mail,new_mail,1)
+          old_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
+          new_open="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');refreshComposerPreview();renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
+          if old_open not in s: raise SystemExit('open mismatch')
           s=s.replace(old_open,new_open,1)
-          if "const VERSION = 'RADAR v0.4.7.23 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.23 Cloud';","const VERSION = 'RADAR v0.4.7.24 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.23</div>','<div class="version">v0.4.7.24</div>',1)
+          marker="$('#senderArtist').addEventListener('input',renderRecipients);"
+          repl="$('#senderArtist').addEventListener('input',()=>{refreshComposerPreview();renderRecipients()});\n$('#senderTrack').addEventListener('input',()=>{refreshComposerPreview();renderRecipients()});\n$('#senderTrackLink').addEventListener('input',()=>{refreshComposerPreview();renderRecipients()});"
+          if marker not in s: raise SystemExit('sender listener mismatch')
+          s=s.replace(marker,repl,1)
+          s=s.replace("$('#senderTrack').addEventListener('input',renderRecipients);",'',1)
+          s=s.replace("$('#senderTrackLink').addEventListener('input',renderRecipients);",'',1)
+          css_marker='.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}'
+          css_new=css_marker+'.personalizedHint{margin-top:7px;font-size:10px;color:var(--green);letter-spacing:.02em}'
+          if css_marker not in s: raise SystemExit('css mismatch')
+          s=s.replace(css_marker,css_new,1)
+          if "const VERSION = 'RADAR v0.4.7.24 Cloud';" not in s: raise SystemExit('version mismatch')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.24 Cloud';","const VERSION = 'RADAR v0.4.7.25 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.24</div>','<div class="version">v0.4.7.25</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.24 Cloud" worker.js
-          grep -q "Track submission — {{track}} for {{playlist}}" worker.js
-          grep -q "could be a good fit for your audience" worker.js
-          grep -q "font-family:Inter,ui-sans-serif,system-ui" worker.js
-          grep -q "font-size:15px" worker.js
+          grep -q "RADAR v0.4.7.25 Cloud" worker.js
+          grep -q "function personalizedMail" worker.js
+          grep -q "function refreshComposerPreview" worker.js
+          grep -q "Personalizzato automaticamente per ogni curatore" worker.js
           grep -q "onclick=\\\"priorityOutreach" worker.js
-          grep -q "function priorityOutreach" worker.js
-          grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
-          grep -q "Promise.all(candidates.map" worker.js
           grep -q "spotifySearchPlaylists" worker.js
-          grep -q "spotifyPlaylistIdentity" worker.js
+          grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.24</div>' worker.js
+          grep -q '<div class="version">v0.4.7.25</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.24 smart outreach composer" || exit 0
+          git commit -m "RADAR v0.4.7.25 clean outreach preview" || exit 0
           git push
