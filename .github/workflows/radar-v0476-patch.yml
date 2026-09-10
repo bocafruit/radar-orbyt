@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.13
+name: RADAR v0.4.7.14
 on:
   push:
     paths:
@@ -10,94 +10,100 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add Spotify Search primary discovery
+      - name: Add owner-led contact verification
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-
-          marker="async function deepContactForCandidate(c,input,env,allowGoogle=false){"
-          helper='\n'.join([
-            "async function spotifySearchPlaylists(input,env){",
-            "  const genre=String(input.genre||'').trim();",
-            "  if(!genre)return[];",
-            "  const token=await spotifyAccessToken(env);",
-            "  if(!token)return[];",
-            "  const market=String(env.SPOTIFY_MARKET||'IT').toUpperCase();",
-            "  const artists=String(input.artists||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,2);",
-            "  const queries=input.mode==='complete'?unique([genre,...artists.map(a=>genre+' '+a)]).slice(0,3):[genre];",
-            "  const pages=input.mode==='complete'?2:1;",
-            "  const found=new Map();",
-            "  for(const q of queries){",
-            "    for(let page=0;page<pages;page++){",
-            "      const u=new URL('https://api.spotify.com/v1/search');",
-            "      u.searchParams.set('q',q);",
-            "      u.searchParams.set('type','playlist');",
-            "      u.searchParams.set('market',market);",
-            "      u.searchParams.set('limit','10');",
-            "      u.searchParams.set('offset',String(page*10));",
-            "      const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}}).catch(()=>null);",
-            "      if(!r||!r.ok){if(r&&r.status===429)break;continue}",
-            "      const d=await r.json().catch(()=>({}));",
-            "      for(const x of d.playlists?.items||[]){",
-            "        if(!x?.id||!x?.name)continue;",
-            "        const url=String(x.external_urls?.spotify||('https://open.spotify.com/playlist/'+x.id));",
-            "        if(found.has(url))continue;",
-            "        found.set(url,{title:String(x.name||''),description:String(x.description||''),url,spotifyPrimary:true});",
-            "      }",
-            "    }",
-            "  }",
-            "  return [...found.values()];",
-            "}",
-            ""
-          ])+'\n'
-          if marker not in s: raise SystemExit('deep contact marker missing')
-          if 'async function spotifySearchPlaylists(input,env){' in s: raise SystemExit('Spotify Search helper already exists')
-          s=s.replace(marker,helper+marker,1)
-
-          old="  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,googleUsed:0,candidates:[]};\n  const queries=buildQueries(input);\n  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));\n  let rawResults=smartBatches.flatMap(x=>x.results);"
-          new="  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY&&(!env.SPOTIFY_CLIENT_ID||!env.SPOTIFY_CLIENT_SECRET))return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,spotifyConfigured:false,googleUsed:0,candidates:[]};\n  const spotifyPrimary=await spotifySearchPlaylists(input,env).catch(()=>[]);\n  const queries=buildQueries(input);\n  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));\n  let rawResults=spotifyPrimary.concat(smartBatches.flatMap(x=>x.results));"
-          if old not in s: raise SystemExit('discoverBase source marker missing')
+          old="""async function deepContactForCandidate(c,input,env,allowGoogle=false){
+  const raw=String(c.name||'').replace(/\"/g,'').trim();
+  const genre=String(input.genre||'').replace(/\"/g,'').trim();
+  const queries=[
+    '\"'+raw+'\" Spotify playlist curator contact email Instagram',
+    '\"'+raw+'\" playlist submit music submission contact',
+    '\"'+raw+'\" playlist website curator '+(genre?'\"'+genre+'\"':'')
+  ];
+  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
+  let results=smartBatches.flatMap(x=>x.results);
+  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
+  let ev=contactEvidence(results,c.name);
+  let ct=contactabilityFromEvidence(ev);
+  let googleUsed=0;
+  if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
+    const googleQuery='\"'+raw+'\" Spotify playlist curator email Instagram submit music contact';
+    const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
+    if(googleResults.length){
+      results=results.concat(googleResults);
+      ev=contactEvidence(results,c.name);
+      ct=contactabilityFromEvidence(ev);
+    }
+    googleUsed=1;
+  }
+  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
+  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
+  const curator=spotify?.owner||webCurator;
+  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:spotify?.owner?'Spotify':'Web',spotifyOwnerVerified:!!spotify?.owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
+}"""
+          new="""async function deepContactForCandidate(c,input,env,allowGoogle=false){
+  const raw=String(c.name||'').replace(/\"/g,'').trim();
+  const genre=String(input.genre||'').replace(/\"/g,'').trim();
+  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
+  const owner=String(spotify?.owner||'').replace(/\"/g,'').trim();
+  const queries=owner?[
+    '\"'+owner+'\" \"'+raw+'\" Spotify playlist contact email Instagram',
+    '\"'+owner+'\" playlist submit music submission contact',
+    '\"'+owner+'\" \"'+raw+'\" website Instagram',
+    '\"'+raw+'\" Spotify playlist curator contact email submission'
+  ]:[
+    '\"'+raw+'\" Spotify playlist curator contact email Instagram',
+    '\"'+raw+'\" playlist submit music submission contact',
+    '\"'+raw+'\" playlist website curator '+(genre?'\"'+genre+'\"':'')
+  ];
+  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
+  let results=smartBatches.flatMap(x=>x.results);
+  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
+  let ev=contactEvidence(results,owner||c.name);
+  let ct=contactabilityFromEvidence(ev);
+  let googleUsed=0;
+  if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
+    const googleQuery=owner?'\"'+owner+'\" \"'+raw+'\" playlist email Instagram submit music contact':'\"'+raw+'\" Spotify playlist curator email Instagram submit music contact';
+    const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
+    if(googleResults.length){
+      results=results.concat(googleResults);
+      ev=contactEvidence(results,owner||c.name);
+      ct=contactabilityFromEvidence(ev);
+    }
+    googleUsed=1;
+  }
+  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
+  const curator=owner||webCurator;
+  const contactTarget=owner?'Spotify owner':'Playlist';
+  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:owner?'Spotify':'Web',contactTarget,spotifyOwnerVerified:!!owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
+}"""
+          if old not in s: raise SystemExit('deepContactForCandidate marker mismatch')
           s=s.replace(old,new,1)
-
-          old="    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',...base});"
-          new="    map.set(spotifyUrl,{name:cleanTitle(r.title),spotifyUrl,snippet:r.description||'',sourceTitle:r.title||'',contactability:0,email:'',instagram:'',submission:'',site:'',discoverySource:r.spotifyPrimary?'Spotify':'Web',spotifyPrimary:!!r.spotifyPrimary,...base,score:clamp(base.score+(r.spotifyPrimary?8:0)),confidence:clamp(base.confidence+(r.spotifyPrimary?8:0))});"
-          if old not in s: raise SystemExit('candidate map marker missing')
-          s=s.replace(old,new,1)
-
-          old="  const enginesUsed=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None').concat(googleUsed?['Google']:[]));"
-          new="  const enginesUsed=unique((spotifyPrimary.length?['Spotify']:[]).concat(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None')).concat(googleUsed?['Google']:[]));"
-          if old not in s: raise SystemExit('enginesUsed marker missing')
-          s=s.replace(old,new,1)
-
-          old="  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,candidates,providers:providerStatus(env),enginesUsed,failoverPaths};"
-          new="  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,spotifyConfigured:!!env.SPOTIFY_CLIENT_ID&&!!env.SPOTIFY_CLIENT_SECRET,spotifyPrimaryCount:spotifyPrimary.length,googleUsed,candidates,providers:providerStatus(env),enginesUsed,failoverPaths};"
-          if old not in s: raise SystemExit('discoverBase return marker missing')
-          s=s.replace(old,new,1)
-
-          if "const VERSION = 'RADAR v0.4.7.12 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.12 Cloud';","const VERSION = 'RADAR v0.4.7.13 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.12</div>','<div class="version">v0.4.7.13</div>',1)
+          if "const VERSION = 'RADAR v0.4.7.13 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.13 Cloud';","const VERSION = 'RADAR v0.4.7.14 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.13</div>','<div class="version">v0.4.7.14</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.13 Cloud" worker.js
+          grep -q "RADAR v0.4.7.14 Cloud" worker.js
+          grep -q "const owner=String(spotify?.owner" worker.js
+          grep -q "contactTarget=owner?'Spotify owner':'Playlist'" worker.js
           grep -q "spotifySearchPlaylists" worker.js
-          grep -q "type','playlist" worker.js
-          grep -q "market',market" worker.js
-          grep -q "spotifyPrimaryCount" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.13</div>' worker.js
+          grep -q '<div class="version">v0.4.7.14</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.13 Spotify Search primary" || exit 0
+          git commit -m "RADAR v0.4.7.14 owner-led contact verification" || exit 0
           git push
