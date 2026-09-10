@@ -1,120 +1,95 @@
-name: RADAR v0.4.7.6 patch
-
+name: RADAR v0.4.7.6
 on:
   push:
     paths:
       - '.github/workflows/radar-v0476-patch.yml'
-
 permissions:
   contents: write
-
 jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-      - name: Apply surgical curator patch
-        shell: bash
+      - name: Patch curator evidence extraction
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
+          p=Path('worker.js')
+          s=p.read_text()
 
-          p = Path('worker.js')
-          s = p.read_text()
-          original = s
+          old_identity="""function displayPlaylistIdentity(r){
+            const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+            const fallback=String((r&&r.name)||'').trim();
+            const source=(raw||fallback)
+              .replace(/\\s*[|·]\\s*Spotify\\s*$/i,'')
+              .replace(/\\s*[-–—:]\\s*Spotify\\s*$/i,'')
+              .trim();
+            const m=source.match(/^(.*?)\\s*[-–—:]\\s*playlist\\s+by\\s+(.+?)\\s*$/i);
+            if(m){
+              const playlist=m[1].trim(),curator=m[2].trim();
+              if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator};
+            }
+            return {name:fallback||source,curator:''};
+          }"""
+          new_identity="""function displayPlaylistIdentity(r){
+            const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
+            const fallback=String((r&&r.name)||'').trim();
+            const enrichedCurator=String((r&&r.curator)||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim();
+            const source=(raw||fallback)
+              .replace(/\\s*[|·]\\s*Spotify\\s*$/i,'')
+              .replace(/\\s*[-–—:]\\s*Spotify\\s*$/i,'')
+              .trim();
+            const m=source.match(/^(.*?)\\s*[-–—:]\\s*playlist\\s+by\\s+(.+?)\\s*$/i);
+            if(m){
+              const playlist=m[1].trim(),curator=m[2].trim();
+              if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator:enrichedCurator||curator};
+            }
+            return {name:fallback||source,curator:enrichedCurator};
+          }"""
+          if old_identity not in s:
+              raise SystemExit('displayPlaylistIdentity target not found; refusing unsafe patch')
+          s=s.replace(old_identity,new_identity,1)
 
-          old_version = "const VERSION = 'RADAR v0.4.7.5 Cloud';"
-          new_version = "const VERSION = 'RADAR v0.4.7.6 Cloud';"
-          if old_version not in s:
-              raise SystemExit('Expected v0.4.7.5 version marker not found')
-          s = s.replace(old_version, new_version, 1)
+          old_guess="""function guessCuratorName(playlistName,results){const p=normalize(playlistName);for(const r of results){const t=String(r.title||'').replace(/\\s*[-|·].*$/,'').trim();const n=normalize(t);if(t && t.length>2 && t.length<80 && n!==p && !/spotify|playlist|submit|instagram|facebook/i.test(t))return t}return''}"""
+          new_guess="""function guessCuratorName(playlistName,results){
+            const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];
+            const reject=/^(spotify|playlist|playlists|curator|music|official|contact|submit|submission|instagram|facebook|youtube|tiktok|soundcloud|various artists)$/i;
+            const clean=v=>String(v||'').replace(/^[\\s:|·–—-]+|[\\s:|·–—-]+$/g,'').replace(/\\s+/g,' ').trim();
+            const add=(name,score,row)=>{name=clean(name);const n=normalize(name);if(name.length>=2&&name.length<=80&&!reject.test(name)&&n!==p&&!/@|https?:|www\\./i.test(name)&&!/^\\d+$/.test(name))hits.push({name,score,row})};
+            for(const r of rows){
+              const title=String(r.title||'').replace(/<[^>]*>/g,' ').trim(),desc=String(r.description||'').replace(/<[^>]*>/g,' ').trim(),text=(title+' — '+desc).replace(/\\s+/g,' ');let m;
+              const patterns=[/(?:playlist\\s+)?curated\\s+by\\s+([^|·;,.()]{2,80})/i,/playlist\\s+by\\s+([^|·;,.()]{2,80})/i,/(?:playlist\\s+)?curator\\s*[:·–—-]\\s*([^|·;,.()]{2,80})/i,/(?:owner|created\\s+by)\\s*[:·–—-]?\\s*([^|·;,.()]{2,80})/i];
+              for(const rx of patterns)if((m=text.match(rx)))add(m[1],70,r);
+              if((m=title.match(/^(.{2,80}?)\\s*[-–—|:]\\s*(?:spotify\\s+)?playlist\\s+curator\\b/i)))add(m[1],72,r);
+              if((m=title.match(/^(.{2,80}?)\\s*[-–—|:]\\s*(?:playlist\\s+)?curator\\b/i)))add(m[1],72,r);
+            }
+            if(!hits.length)return'';
+            for(const h of hits){const n=normalize(h.name),txt=normalize((h.row.title||'')+' '+(h.row.description||'')+' '+(h.row.url||''));if(p&&txt.includes(p))h.score+=15;if(/spotify|playlist/.test(txt))h.score+=5;if(rows.filter(r=>normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||'')).includes(n)).length>=2)h.score+=10}
+            hits.sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
+            return hits[0].score>=75?hits[0].name:'';
+          }"""
+          if old_guess not in s:
+              raise SystemExit('guessCuratorName target not found; refusing unsafe patch')
+          s=s.replace(old_guess,new_guess,1)
 
-          identity_pattern = re.compile(r"function displayPlaylistIdentity\(r\)\{.*?\n\}", re.S)
-          identity_replacement = r'''function displayPlaylistIdentity(r){
-  const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\u00a0/g,' ').replace(/\\s+/g,' ').trim();
-  const fallback=String((r&&r.name)||'').trim();
-  const enrichedCurator=String((r&&r.curator)||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim();
-  const source=(raw||fallback)
-    .replace(/\\s*[|·]\\s*Spotify\\s*$/i,'')
-    .replace(/\\s*[-–—:]\\s*Spotify\\s*$/i,'')
-    .trim();
-  const m=source.match(/^(.*?)\\s*[-–—:]\\s*playlist\\s+by\\s+(.+?)\\s*$/i);
-  if(m){
-    const playlist=m[1].trim(),curator=m[2].trim();
-    if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator:enrichedCurator||curator};
-  }
-  return {name:fallback||source,curator:enrichedCurator};
-}'''
-          s, n = identity_pattern.subn(identity_replacement, s, count=1)
-          if n != 1:
-              raise SystemExit(f'displayPlaylistIdentity replacement count={n}')
-
-          curator_pattern = re.compile(r"function guessCuratorName\(playlistName,results\)\{.*?\n\}", re.S)
-          curator_replacement = r'''function guessCuratorName(playlistName,results){
-  const playlistNorm=normalize(playlistName);
-  const rows=Array.isArray(results)?results:[];
-  const candidates=[];
-  const reject=/^(spotify|playlist|playlists|curator|music|official|contact|submit|submission|instagram|facebook|youtube|tiktok|soundcloud|various artists)$/i;
-  const clean=v=>String(v||'').replace(/^[\\s:|·–—-]+|[\\s:|·–—-]+$/g,'').replace(/\\s+/g,' ').trim();
-  const valid=v=>{
-    const x=clean(v),n=normalize(x);
-    return x.length>=2&&x.length<=80&&!reject.test(x)&&n!==playlistNorm&&!/@|https?:|www\\./i.test(x)&&!/^\\d+$/.test(x);
-  };
-  const add=(name,score,row)=>{name=clean(name);if(valid(name))candidates.push({name,score,row})};
-  for(const r of rows){
-    const title=String(r.title||'').replace(/<[^>]*>/g,' ').trim();
-    const desc=String(r.description||'').replace(/<[^>]*>/g,' ').trim();
-    const text=(title+' — '+desc).replace(/\\s+/g,' ');
-    let m;
-    const explicit=[
-      /(?:playlist\\s+)?curated\\s+by\\s+([^|·;,.()]{2,80})/i,
-      /playlist\\s+by\\s+([^|·;,.()]{2,80})/i,
-      /(?:playlist\\s+)?curator\\s*[:·–—-]\\s*([^|·;,.()]{2,80})/i,
-      /(?:owner|created\\s+by)\\s*[:·–—-]?\\s*([^|·;,.()]{2,80})/i
-    ];
-    for(const rx of explicit){if((m=text.match(rx)))add(m[1],70,r)}
-    if((m=title.match(/^(.{2,80}?)\\s*[-–—|:]\\s*(?:spotify\\s+)?playlist\\s+curator\\b/i)))add(m[1],72,r);
-    if((m=title.match(/^(.{2,80}?)\\s*[-–—|:]\\s*(?:playlist\\s+)?curator\\b/i)))add(m[1],72,r);
-  }
-  if(!candidates.length)return'';
-  for(const c of candidates){
-    const n=normalize(c.name);
-    const rowText=normalize((c.row?.title||'')+' '+(c.row?.description||'')+' '+(c.row?.url||''));
-    if(playlistNorm&&rowText.includes(playlistNorm))c.score+=15;
-    if(/spotify|playlist/.test(rowText))c.score+=5;
-    const corroboration=rows.filter(r=>normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||'')).includes(n)).length;
-    if(corroboration>=2)c.score+=10;
-  }
-  candidates.sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
-  return candidates[0].score>=75?candidates[0].name:'';
-}'''
-          s, n = curator_pattern.subn(curator_replacement, s, count=1)
-          if n != 1:
-              raise SystemExit(f'guessCuratorName replacement count={n}')
-
-          old_return = "return{result:rescoreContactFirst({...c,...ct,searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
-          new_return = "return{result:rescoreContactFirst({...c,...ct,curator:guessCuratorName(c.name,results),searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
+          old_return="return{result:rescoreContactFirst({...c,...ct,searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
+          new_return="return{result:rescoreContactFirst({...c,...ct,curator:guessCuratorName(c.name,results),searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
           if old_return not in s:
-              raise SystemExit('deepContactForCandidate return marker not found')
-          s = s.replace(old_return, new_return, 1)
+              raise SystemExit('deep contact return target not found; refusing unsafe patch')
+          s=s.replace(old_return,new_return,1)
 
-          if s == original:
-              raise SystemExit('No changes made')
+          old_version="const VERSION = 'RADAR v0.4.7.5 Cloud';"
+          if old_version not in s:
+              raise SystemExit('version target not found; refusing unsafe patch')
+          s=s.replace(old_version,"const VERSION = 'RADAR v0.4.7.6 Cloud';",1)
           p.write_text(s)
           PY
-
-          node --check worker.js
-          grep -q "RADAR v0.4.7.6 Cloud" worker.js
-          grep -q "curator:guessCuratorName(c.name,results)" worker.js
-
-      - name: Commit v0.4.7.6
-        shell: bash
+      - name: Syntax check
+        run: node --check worker.js
+      - name: Commit worker
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "bocafruit"
+          git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.6 curator evidence extraction"
-          git push origin main
+          git commit -m "RADAR v0.4.7.6 curator evidence extraction" || exit 0
+          git push
