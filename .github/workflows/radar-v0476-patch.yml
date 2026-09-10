@@ -23,7 +23,7 @@ jobs:
             ("    if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,sources:new Set(),playlistSources:new Set()});","    if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,spotifyExact:false,sources:new Set(),playlistSources:new Set()});"),
             ("    const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.sources.add(h.source);","    const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.spotifyExact=g.spotifyExact||h.spotifyExact;g.sources.add(h.source);"),
             ("    score:(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)","    score:(g.spotifyExact?220:0)+(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)"),
-            (")).filter(g=>(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);","  })).filter(g=>(g.spotifyExact&&g.strongTitle)||(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"),
+            ("  })).filter(g=>(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);","  })).filter(g=>(g.spotifyExact&&g.strongTitle)||(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"),
             ("curator:guessCuratorName(c.name,results),searchSources:","curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:"),
             ("const VERSION = 'RADAR v0.4.7.10 Cloud';","const VERSION = 'RADAR v0.4.7.11 Cloud';"),
             ('<div class="version">v0.4.7.10</div>','<div class="version">v0.4.7.11</div>')
