@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.13 Cloud';
+const VERSION = 'RADAR v0.4.7.14 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.13</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.14</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -690,7 +690,14 @@ async function spotifySearchPlaylists(input,env){
 async function deepContactForCandidate(c,input,env,allowGoogle=false){
   const raw=String(c.name||'').replace(/"/g,'').trim();
   const genre=String(input.genre||'').replace(/"/g,'').trim();
-  const queries=[
+  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
+  const owner=String(spotify?.owner||'').replace(/"/g,'').trim();
+  const queries=owner?[
+    '"'+owner+'" "'+raw+'" Spotify playlist contact email Instagram',
+    '"'+owner+'" playlist submit music submission contact',
+    '"'+owner+'" "'+raw+'" website Instagram',
+    '"'+raw+'" Spotify playlist curator contact email submission'
+  ]:[
     '"'+raw+'" Spotify playlist curator contact email Instagram',
     '"'+raw+'" playlist submit music submission contact',
     '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
@@ -698,23 +705,23 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
   const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
   let results=smartBatches.flatMap(x=>x.results);
   const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
-  let ev=contactEvidence(results,c.name);
+  let ev=contactEvidence(results,owner||c.name);
   let ct=contactabilityFromEvidence(ev);
   let googleUsed=0;
   if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
-    const googleQuery='"'+raw+'" Spotify playlist curator email Instagram submit music contact';
+    const googleQuery=owner?'"'+owner+'" "'+raw+'" playlist email Instagram submit music contact':'"'+raw+'" Spotify playlist curator email Instagram submit music contact';
     const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
     if(googleResults.length){
       results=results.concat(googleResults);
-      ev=contactEvidence(results,c.name);
+      ev=contactEvidence(results,owner||c.name);
       ct=contactabilityFromEvidence(ev);
     }
     googleUsed=1;
   }
-  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
   const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
-  const curator=spotify?.owner||webCurator;
-  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:spotify?.owner?'Spotify':'Web',spotifyOwnerVerified:!!spotify?.owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
+  const curator=owner||webCurator;
+  const contactTarget=owner?'Spotify owner':'Playlist';
+  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:owner?'Spotify':'Web',contactTarget,spotifyOwnerVerified:!!owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
 }
 
 async function discoverBase(input,env){
