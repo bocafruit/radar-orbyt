@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.9 Cloud';
+const VERSION = 'RADAR v0.4.7.10 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.4</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.10</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -117,21 +117,21 @@ let selectedOutreach=new Map();
 function keyFor(r){return String(r.email||'').toLowerCase()}
 
 function cleanPlaylistName(raw){
-  let s=String(raw||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+  let s=String(raw||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\\s+/g,' ').trim();
   s=s.replace(/\s*[\|\u2022]\s*(Soundplate(?:\.com)?|Spotify|SubmitHub|Groover|Daily Playlists).*$/i,'');
-  s=s.replace(/\s*[-:]\s*Spotify Playlist.*$/i,'');
-  s=s.replace(/\s*\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission)\].*$/i,'');
-  s=s.replace(/\s*\((?:Submit Music Here|Submit(?: Your)? Music)\).*$/i,'');
-  s=s.replace(/\s*[\|\u2022]\s*$/,'').trim();
+  s=s.replace(/\\s*[-:]\\s*Spotify Playlist.*$/i,'');
+  s=s.replace(/\\s*\\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission)\\].*$/i,'');
+  s=s.replace(/\\s*\\((?:Submit Music Here|Submit(?: Your)? Music)\\).*$/i,'');
+  s=s.replace(/\\s*[\\|\\u2022]\\s*$/,'').trim();
   return s||String(raw||'');
 }
 function displayPlaylistIdentity(r){
-  const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\u00a0/g,' ').replace(/\\s+/g,' ').trim();
   const fallback=String((r&&r.name)||'').trim();
-  const enrichedCurator=String((r&&r.curator)||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+  const enrichedCurator=String((r&&r.curator)||'').replace(/<[^>]*>/g,' ').replace(/\\s+/g,' ').trim();
   const source=(raw||fallback)
-    .replace(/\s*[|·]\s*Spotify\s*$/i,'')
-    .replace(/\s*[-–—:]\s*Spotify\s*$/i,'')
+    .replace(/\\s*[|·]\\s*Spotify\\s*$/i,'')
+    .replace(/\\s*[-–—:]\\s*Spotify\\s*$/i,'')
     .trim();
   const m=source.match(/^(.*?)\s*[-–—:]\s*playlist\s+by\s+(.+?)\s*$/i);
   if(m){
@@ -251,7 +251,7 @@ async function loadPlaylistCovers(items){
       const res=await fetch(u);
       if(!res.ok)return;
       const d=await res.json();
-      const canonical=String(d.title||'').replace(/\s+/g,' ').trim();
+      const canonical=String(d.title||'').replace(/\\s+/g,' ').trim();
       const titleNode=document.querySelector('.title[data-title-index="'+i+'"]');
       if(titleNode&&canonical.length>=3&&canonical.length<=180)titleNode.textContent=canonical;
       if(!d.thumbnail_url)return;
