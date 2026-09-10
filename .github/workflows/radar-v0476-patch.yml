@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.21
+name: RADAR v0.4.7.22
 on:
   push:
     paths:
@@ -10,33 +10,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Tighten outreach priority to visible contacts
+      - name: Make outreach priority actionable
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old="function outreachPriority(r){\n  const score=Number(r.opportunityScore||0);\n  const strongest=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));\n  if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};\n  if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};\n  return null;\n}"
-          new="function outreachPriority(r){\n  const score=Number(r.opportunityScore||0);\n  const visibleConfidences=[];\n  if(r.email)visibleConfidences.push(Number(r.emailConfidence||0));\n  if(r.instagram)visibleConfidences.push(Number(r.instagramConfidence||0));\n  if(r.submission)visibleConfidences.push(Number(r.submissionConfidence||0));\n  if(r.site)visibleConfidences.push(Number(r.siteConfidence||0));\n  const strongest=visibleConfidences.length?Math.max(...visibleConfidences):0;\n  if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};\n  if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};\n  return null;\n}"
-          if old not in s: raise SystemExit('outreachPriority marker mismatch')
+          old="+(outreachPriority(r)?'<div class=\"outreachPriority '+outreachPriority(r).cls+'\">'+outreachPriority(r).label+'</div>':'')+metaHtml(r)"
+          new="+(outreachPriority(r)?'<button class=\"outreachPriority '+outreachPriority(r).cls+'\" data-priority-index=\"'+i+'\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
+          if old not in s: raise SystemExit('priority UI marker mismatch')
           s=s.replace(old,new,1)
-          if "const VERSION = 'RADAR v0.4.7.20 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.20 Cloud';","const VERSION = 'RADAR v0.4.7.21 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.20</div>','<div class="version">v0.4.7.21</div>',1)
+          marker="function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}"
+          insert="function priorityOutreach(r){\n  if(!r)return;\n  if(r.email){\n    const k=keyFor(r);\n    selectedOutreach.set(k,r);\n    updateOutreachBar();\n    const bar=$('#outreachBar');if(bar)bar.scrollIntoView({behavior:'smooth',block:'nearest'});\n    return;\n  }\n  const channels=[\n    {url:r.submission,confidence:Number(r.submissionConfidence||0)},\n    {url:r.instagram,confidence:Number(r.instagramConfidence||0)},\n    {url:r.site,confidence:Number(r.siteConfidence||0)}\n  ].filter(x=>x.url).sort((a,b)=>b.confidence-a.confidence);\n  if(channels[0])window.open(channels[0].url,'_blank','noopener');\n}\n"+marker
+          if marker not in s: raise SystemExit('render marker mismatch')
+          s=s.replace(marker,insert,1)
+          click_marker="document.addEventListener('click',e=>{"
+          click_insert="document.addEventListener('click',e=>{\n  const priority=e.target.closest('[data-priority-index]');\n  if(priority){\n    const shown=sortedFilteredResults();\n    priorityOutreach(shown[Number(priority.dataset.priorityIndex)]);\n    return;\n  }"
+          if click_marker not in s: raise SystemExit('click handler marker mismatch')
+          s=s.replace(click_marker,click_insert,1)
+          css_old=".outreachPriority{display:inline-flex;margin-top:7px;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.08em}"
+          css_new=".outreachPriority{display:inline-flex;margin-top:7px;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.08em;cursor:pointer;font-family:inherit}"
+          if css_old not in s: raise SystemExit('priority css marker mismatch')
+          s=s.replace(css_old,css_new,1)
+          if "const VERSION = 'RADAR v0.4.7.21 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.21 Cloud';","const VERSION = 'RADAR v0.4.7.22 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.21</div>','<div class="version">v0.4.7.22</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.21 Cloud" worker.js
-          grep -q "const visibleConfidences=\[\]" worker.js
-          grep -q "if(r.email)visibleConfidences.push" worker.js
-          grep -q "if(r.instagram)visibleConfidences.push" worker.js
-          grep -q "if(r.submission)visibleConfidences.push" worker.js
-          grep -q "if(r.site)visibleConfidences.push" worker.js
-          grep -q "PRIORITÀ OUTREACH" worker.js
-          grep -q "BUONA OPPORTUNITÀ" worker.js
-          grep -q "opportunityScore" worker.js
+          grep -q "RADAR v0.4.7.22 Cloud" worker.js
+          grep -q "function priorityOutreach" worker.js
+          grep -q "data-priority-index" worker.js
+          grep -q "selectedOutreach.set" worker.js
+          grep -q "submissionConfidence" worker.js
+          grep -q "outreachPriority" worker.js
           grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
           grep -q "Promise.all(candidates.map" worker.js
           grep -q "spotifySearchPlaylists" worker.js
@@ -44,11 +53,11 @@ jobs:
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.21</div>' worker.js
+          grep -q '<div class="version">v0.4.7.22</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.21 visible contact priority" || exit 0
+          git commit -m "RADAR v0.4.7.22 actionable outreach priority" || exit 0
           git push
