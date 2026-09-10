@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.5 Cloud';
+const VERSION = 'RADAR v0.4.7.6 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -128,6 +128,7 @@ function cleanPlaylistName(raw){
 function displayPlaylistIdentity(r){
   const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
   const fallback=String((r&&r.name)||'').trim();
+  const enrichedCurator=String((r&&r.curator)||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
   const source=(raw||fallback)
     .replace(/\s*[|·]\s*Spotify\s*$/i,'')
     .replace(/\s*[-–—:]\s*Spotify\s*$/i,'')
@@ -135,9 +136,9 @@ function displayPlaylistIdentity(r){
   const m=source.match(/^(.*?)\s*[-–—:]\s*playlist\s+by\s+(.+?)\s*$/i);
   if(m){
     const playlist=m[1].trim(),curator=m[2].trim();
-    if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator};
+    if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator:enrichedCurator||curator};
   }
-  return {name:fallback||source,curator:''};
+  return {name:fallback||source,curator:enrichedCurator};
 }
 
 function spotifySvg(){
@@ -422,7 +423,23 @@ function extractInstagram(text){const matches=String(text||'').match(/https?:\/\
 function instagramHandleFromUrl(url){const m=String(url||'').match(/instagram\.com\/([^/?#]+)/i);return m?'@'+m[1]:''}
 function isSubmissionUrl(url){const s=normalize(url);return /(submit|submission|playlist|music|demo|groover|dailyplaylists|soundplate|linktr\.ee|beacons\.ai|forms\.gle|form)/.test(s) && !/open\.spotify\.com/.test(s)}
 function extractSubmissionUrl(results){for(const r of results){if(isSubmissionUrl(r.url))return r.url;const extras=r.profile?.long_name?[r.profile.long_name]:[];for(const x of extras)if(isSubmissionUrl(x))return x}return''}
-function guessCuratorName(playlistName,results){const p=normalize(playlistName);for(const r of results){const t=String(r.title||'').replace(/\s*[-|·].*$/,'').trim();const n=normalize(t);if(t && t.length>2 && t.length<80 && n!==p && !/spotify|playlist|submit|instagram|facebook/i.test(t))return t}return''}
+function guessCuratorName(playlistName,results){
+  const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];
+  const reject=/^(spotify|playlist|playlists|curator|music|official|contact|submit|submission|instagram|facebook|youtube|tiktok|soundcloud|various artists)$/i;
+  const clean=v=>String(v||'').replace(/^[\s:|·–—-]+|[\s:|·–—-]+$/g,'').replace(/\s+/g,' ').trim();
+  const add=(name,score,row)=>{name=clean(name);const n=normalize(name);if(name.length>=2&&name.length<=80&&!reject.test(name)&&n!==p&&!/@|https?:|www\./i.test(name)&&!/^\d+$/.test(name))hits.push({name,score,row})};
+  for(const r of rows){
+    const title=String(r.title||'').replace(/<[^>]*>/g,' ').trim(),desc=String(r.description||'').replace(/<[^>]*>/g,' ').trim(),text=(title+' — '+desc).replace(/\s+/g,' ');let m;
+    const patterns=[/(?:playlist\s+)?curated\s+by\s+([^|·;,.()]{2,80})/i,/playlist\s+by\s+([^|·;,.()]{2,80})/i,/(?:playlist\s+)?curator\s*[:·–—-]\s*([^|·;,.()]{2,80})/i,/(?:owner|created\s+by)\s*[:·–—-]?\s*([^|·;,.()]{2,80})/i];
+    for(const rx of patterns)if((m=text.match(rx)))add(m[1],70,r);
+    if((m=title.match(/^(.{2,80}?)\s*[-–—|:]\s*(?:spotify\s+)?playlist\s+curator\b/i)))add(m[1],72,r);
+    if((m=title.match(/^(.{2,80}?)\s*[-–—|:]\s*(?:playlist\s+)?curator\b/i)))add(m[1],72,r);
+  }
+  if(!hits.length)return'';
+  for(const h of hits){const n=normalize(h.name),txt=normalize((h.row.title||'')+' '+(h.row.description||'')+' '+(h.row.url||''));if(p&&txt.includes(p))h.score+=15;if(/spotify|playlist/.test(txt))h.score+=5;if(rows.filter(r=>normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||'')).includes(n)).length>=2)h.score+=10}
+  hits.sort((a,b)=>b.score-a.score||a.name.length-b.name.length);
+  return hits[0].score>=75?hits[0].name:'';
+}
 function confidenceFromScore(n){return clamp(n,0,100)}
 function hostOf(url){try{return new URL(url).hostname.replace(/^www\./,'')}catch{return''}}
 function isGenericHost(h){return /^(open\.spotify\.com|spotify\.com|instagram\.com|facebook\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|soundcloud\.com)$/i.test(h)}
@@ -603,7 +620,7 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
     }
     googleUsed=1;
   }
-  return{result:rescoreContactFirst({...c,...ct,searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
+  return{result:rescoreContactFirst({...c,...ct,curator:guessCuratorName(c.name,results),searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
 }
 
 async function discoverBase(input,env){
