@@ -20,21 +20,25 @@ jobs:
           new_subject='<input id="mailSubject" value="Track submission — {{track}} for {{playlist}}" />'
           if old_subject not in s: raise SystemExit('subject marker mismatch')
           s=s.replace(old_subject,new_subject,1)
-          old_body="""<textarea id=\"mailBody\">Hi {{curator}},
-
-I’m {{artist}} and I’d love to submit my track {{track}} for consideration on {{playlist}}.
-
-Listen here: {{spotify_link}}
-
-Thank you for your time.</textarea>"""
-          new_body="""<textarea id=\"mailBody\">Hi {{curator}},
-
-I’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.
-
-Here’s the track: {{spotify_link}}
-
-Thanks for listening,
-{{artist}}</textarea>"""
+          old_body='\n'.join([
+            '<textarea id="mailBody">Hi {{curator}},',
+            '',
+            'I’m {{artist}} and I’d love to submit my track {{track}} for consideration on {{playlist}}.',
+            '',
+            'Listen here: {{spotify_link}}',
+            '',
+            'Thank you for your time.</textarea>'
+          ])
+          new_body='\n'.join([
+            '<textarea id="mailBody">Hi {{curator}},',
+            '',
+            'I’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.',
+            '',
+            'Here’s the track: {{spotify_link}}',
+            '',
+            'Thanks for listening,',
+            '{{artist}}</textarea>'
+          ])
           if old_body not in s: raise SystemExit('message marker mismatch')
           s=s.replace(old_body,new_body,1)
           old_css='.composeGrid input,.composeGrid textarea{width:100%;border:1px solid #30385f;background:#080c18;color:#fff;border-radius:12px;padding:11px 12px;outline:none}.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.5}'
