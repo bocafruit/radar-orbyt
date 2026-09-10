@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.4 Cloud';
+const VERSION = 'RADAR v0.4.7.5 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -128,11 +128,14 @@ function cleanPlaylistName(raw){
 function displayPlaylistIdentity(r){
   const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
   const fallback=String((r&&r.name)||'').trim();
-  const source=raw||fallback;
+  const source=(raw||fallback)
+    .replace(/\s*[|·]\s*Spotify\s*$/i,'')
+    .replace(/\s*[-–—:]\s*Spotify\s*$/i,'')
+    .trim();
   const m=source.match(/^(.*?)\s*[-–—:]\s*playlist\s+by\s+(.+?)\s*$/i);
   if(m){
     const playlist=m[1].trim(),curator=m[2].trim();
-    if(playlist.length>=3&&curator.length>=2)return {name:playlist,curator};
+    if(playlist.length>=3&&curator.length>=2&&curator.length<=100)return {name:playlist,curator};
   }
   return {name:fallback||source,curator:''};
 }
