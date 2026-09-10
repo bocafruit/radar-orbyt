@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.25
+name: RADAR v0.4.7.26
 on:
   push:
     paths:
@@ -10,44 +10,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add priority outreach toggle only
+      - name: Clean composer UI only
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old=".outreachPriority.medium{color:var(--amber);border:1px solid rgba(255,209,102,.28);background:rgba(255,209,102,.08)}"
-          new=old+".outreachPriority.selected{color:#07120b!important;background:var(--green)!important;border-color:var(--green)!important;box-shadow:0 0 16px rgba(105,240,181,.22)}"
-          if old not in s: raise SystemExit('priority css marker mismatch')
+          old='<div><label data-i18n="variables">Variabili rapide</label><div class="tokenRow"><button class="token" data-token="{{curator}}">{{curator}}</button><button class="token" data-token="{{playlist}}">{{playlist}}</button><button class="token" data-token="{{artist}}">{{artist}}</button><button class="token" data-token="{{track}}">{{track}}</button><button class="token" data-token="{{spotify_link}}">{{spotify_link}}</button></div></div>'
+          new='<div class="personalizedHint">✦ Personalizzato automaticamente per ogni curatore</div>'
+          if old not in s: raise SystemExit('variables block mismatch')
           s=s.replace(old,new,1)
-          old_btn="+(outreachPriority(r)?'<button type=\"button\" class=\"outreachPriority '+outreachPriority(r).cls+'\" data-priority-index=\"'+i+'\" onclick=\"priorityOutreach(sortedFilteredResults()[Number(this.dataset.priorityIndex)])\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
-          new_btn="+(outreachPriority(r)?'<button type=\"button\" class=\"outreachPriority '+outreachPriority(r).cls+(r.email&&selectedOutreach.has(keyFor(r))?' selected':'')+'\" data-priority-index=\"'+i+'\" onclick=\"priorityOutreach(sortedFilteredResults()[Number(this.dataset.priorityIndex)])\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
-          if old_btn not in s: raise SystemExit('priority button marker mismatch')
-          s=s.replace(old_btn,new_btn,1)
-          old_fn="\n".join(["function priorityOutreach(r){","  if(!r)return;","  if(r.email){","    const k=keyFor(r);","    selectedOutreach.set(k,r);","    updateOutreachBar();","    const bar=$('#outreachBar');if(bar)bar.scrollIntoView({behavior:'smooth',block:'nearest'});","    return;","  }"])
-          new_fn="\n".join(["function priorityOutreach(r){","  if(!r)return;","  if(r.email){","    const k=keyFor(r);","    if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);","    paintResults(sortedFilteredResults());","    updateOutreachBar();","    const bar=$('#outreachBar');if(bar&&selectedOutreach.has(k))bar.scrollIntoView({behavior:'smooth',block:'nearest'});","    return;","  }"])
-          if old_fn not in s: raise SystemExit('priority function marker mismatch')
-          s=s.replace(old_fn,new_fn,1)
-          if "const VERSION = 'RADAR v0.4.7.24 Cloud';" not in s: raise SystemExit('version marker mismatch')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.24 Cloud';","const VERSION = 'RADAR v0.4.7.25 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.24</div>','<div class="version">v0.4.7.25</div>',1)
+          css='.composeGrid textarea{min-height:170px;resize:vertical;line-height:1.6;font-size:15px;font-weight:400;letter-spacing:0}'
+          css2=css+'.personalizedHint{font-size:10px;color:var(--green);letter-spacing:.03em;padding:2px 1px 4px}'
+          if css not in s: raise SystemExit('composer css mismatch')
+          s=s.replace(css,css2,1)
+          open_old="$('#openComposer').addEventListener('click',()=>{$('#composerOverlay').classList.add('open');renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
+          open_new="$('#openComposer').addEventListener('click',()=>{const r=[...selectedOutreach.values()][0];if(r){$('#mailSubject').value=fillTemplate('Track submission — {{track}} for {{playlist}}',r);$('#mailBody').value=fillTemplate('Hi {{curator}},\\n\\nI’m {{artist}}. I came across {{playlist}} and thought {{track}} could be a good fit for your audience.\\n\\nHere’s the track: {{spotify_link}}\\n\\nThanks for listening,\\n{{artist}}',r)}$('#composerOverlay').classList.add('open');renderRecipients();setTimeout(()=>$('#senderTrack')?.focus(),80)});"
+          if open_old not in s: raise SystemExit('composer open mismatch')
+          s=s.replace(open_old,open_new,1)
+          if "const VERSION = 'RADAR v0.4.7.25 Cloud';" not in s: raise SystemExit('version mismatch')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.25 Cloud';","const VERSION = 'RADAR v0.4.7.26 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.25</div>','<div class="version">v0.4.7.26</div>',1)
           p.write_text(s)
           PY
-      - name: Syntax and canary check
+      - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.25 Cloud" worker.js
+          grep -q "RADAR v0.4.7.26 Cloud" worker.js
           grep -q "function updateClock" worker.js
           grep -q "health').addEventListener" worker.js
           grep -q "if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);" worker.js
           grep -q "outreachPriority.selected" worker.js
-          grep -q "priorityOutreach(sortedFilteredResults" worker.js
+          grep -q "Personalizzato automaticamente per ogni curatore" worker.js
+          grep -q "function fillTemplate" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
+          if grep -q '<label data-i18n="variables">Variabili rapide</label>' worker.js; then exit 1; fi
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.25 outreach toggle only" || exit 0
+          git commit -m "RADAR v0.4.7.26 clean composer preview" || exit 0
           git push
