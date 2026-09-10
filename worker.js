@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.16 Cloud';
+const VERSION = 'RADAR v0.4.7.17 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -67,11 +67,11 @@ const HTML = `<!doctype html>
 .spotifyIcon{width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-right:5px}
 @media(max-width:560px){.brand h1{font-size:27px}.dateClock{min-width:76px;padding:6px}.dateClock .clockDate{font-size:7px}.dateClock .clockTime{font-size:10px}}
 
-.curatorIdentity{margin-top:5px;font-size:10px;line-height:1.25;color:#8f99bb;letter-spacing:.045em}.curatorIdentity b{color:#b8c1df;font-weight:800;letter-spacing:.08em}
+.opportunityIdentity{font-size:10px;color:var(--muted);margin-top:5px;letter-spacing:.05em}.opportunityIdentity b{color:var(--green)}.curatorIdentity{margin-top:5px;font-size:10px;line-height:1.25;color:#8f99bb;letter-spacing:.045em}.curatorIdentity b{color:#b8c1df;font-weight:800;letter-spacing:.08em}
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.16</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.17</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -204,8 +204,8 @@ function sortedFilteredResults(){
   const s=$('#sortResults')?.value||'contact-desc';
   const n=(v)=>Number(v)||0;
   a=[...a].sort((x,y)=>{
-    if(s==='contact-desc')return n(y.contactability)-n(x.contactability);
-    if(s==='contact-asc')return n(x.contactability)-n(y.contactability);
+    if(s==='contact-desc')return n(y.opportunityScore)-n(x.opportunityScore)||n(y.contactability)-n(x.contactability);
+    if(s==='contact-asc')return n(x.opportunityScore)-n(y.opportunityScore)||n(x.contactability)-n(y.contactability);
     if(s==='match-desc')return n(y.match)-n(x.match);
     if(s==='match-asc')return n(x.match)-n(y.match);
     if(s==='confidence-desc')return n(y.confidence)-n(x.confidence);
@@ -271,7 +271,7 @@ async function loadPlaylistCovers(items){
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title" data-title-index="'+i+'">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title" data-title-index="'+i+'">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+(r.opportunityScore!=null?'<div class="opportunityIdentity"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
   loadPlaylistCovers(items); verifyVisibleLinks();
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
@@ -631,6 +631,8 @@ function contactabilityFromEvidence(ev){
 
 function rescoreContactFirst(r,input){
   if((input.objective||'contact')!=='contact')return r;
+  const bestContactConfidence=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));
+  const opportunityScore=clamp(Math.round(Number(r.match||0)*.30+Number(r.contactability||0)*.25+bestContactConfidence*.25+(r.spotifyOwnerVerified?15:0)+(r.spotifyPrimary?5:0)));
   let score=clamp(r.match*.32+r.contactability*.40+r.activity*.10+r.confidence*.18);
   if(r.contactability<30)score=clamp(score-28);
   const badge=score>=74&&r.contactability>=55?'Strong Match':score>=56&&r.contactability>=30?'Worth Checking':'Weak Match';
@@ -639,7 +641,7 @@ function rescoreContactFirst(r,input){
   else if(r.contactability>=30)why.push('almeno un canale pubblico utile associato');
   if(r.match>=65)why.push('buona coerenza con genere/artisti');
   if(r.activity>=60)why.push('segnali web di attività recente');
-  return{...r,score,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};
+  return{...r,score,opportunityScore,badge,why:(why.length?why:['contatto pubblico da verificare']).join('; ')+'.'};
 }
 
 let spotifyTokenCache={token:'',expiresAt:0};
