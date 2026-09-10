@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.18 Cloud';
+const VERSION = 'RADAR v0.4.7.19 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.18</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.19</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -717,11 +717,21 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
     '"'+raw+'" playlist submit music submission contact',
     '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
   ];
-  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
+  const firstQueries=input.mode==='complete'?queries:queries.slice(0,2);
+  let smartBatches=await Promise.all(firstQueries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
   let results=smartBatches.flatMap(x=>x.results);
-  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
+  let primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
   let ev=contactEvidence(results,owner||c.name,c.name);
   let ct=contactabilityFromEvidence(ev);
+  const firstStrongest=Math.max(Number(ct.emailConfidence||0),Number(ct.instagramConfidence||0),Number(ct.submissionConfidence||0),Number(ct.siteConfidence||0));
+  if(input.mode!=='complete' && ct.contactability<55 && firstStrongest<75 && queries.length>firstQueries.length){
+    const extraBatches=await Promise.all(queries.slice(firstQueries.length).map(q=>smartSearch(q,env,10)));
+    smartBatches=smartBatches.concat(extraBatches);
+    results=results.concat(extraBatches.flatMap(x=>x.results));
+    primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
+    ev=contactEvidence(results,owner||c.name,c.name);
+    ct=contactabilityFromEvidence(ev);
+  }
   let googleUsed=0;
   if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
     const googleQuery=owner?'"'+owner+'" "'+raw+'" playlist email Instagram submit music contact':'"'+raw+'" Spotify playlist curator email Instagram submit music contact';
