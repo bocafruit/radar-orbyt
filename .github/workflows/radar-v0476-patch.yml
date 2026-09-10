@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.20
+name: RADAR v0.4.7.21
 on:
   push:
     paths:
@@ -10,34 +10,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add outreach priority
+      - name: Tighten outreach priority to visible contacts
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old="function paintResults(items){\n  const box=$('#results');$('#count').textContent=items.length+' '+t('results');"
-          new="function outreachPriority(r){\n  const score=Number(r.opportunityScore||0);\n  const strongest=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));\n  if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};\n  if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};\n  return null;\n}\nfunction paintResults(items){\n  const box=$('#results');$('#count').textContent=items.length+' '+t('results');"
-          if old not in s: raise SystemExit('paintResults marker mismatch')
+          old="function outreachPriority(r){\n  const score=Number(r.opportunityScore||0);\n  const strongest=Math.max(Number(r.emailConfidence||0),Number(r.instagramConfidence||0),Number(r.submissionConfidence||0),Number(r.siteConfidence||0));\n  if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};\n  if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};\n  return null;\n}"
+          new="function outreachPriority(r){\n  const score=Number(r.opportunityScore||0);\n  const visibleConfidences=[];\n  if(r.email)visibleConfidences.push(Number(r.emailConfidence||0));\n  if(r.instagram)visibleConfidences.push(Number(r.instagramConfidence||0));\n  if(r.submission)visibleConfidences.push(Number(r.submissionConfidence||0));\n  if(r.site)visibleConfidences.push(Number(r.siteConfidence||0));\n  const strongest=visibleConfidences.length?Math.max(...visibleConfidences):0;\n  if(score>=80&&strongest>=75)return{label:'PRIORITÀ OUTREACH',cls:'high'};\n  if(score>=65&&strongest>=50)return{label:'BUONA OPPORTUNITÀ',cls:'medium'};\n  return null;\n}"
+          if old not in s: raise SystemExit('outreachPriority marker mismatch')
           s=s.replace(old,new,1)
-          old2="+(r.opportunityScore!=null?'<div class=\"opportunityIdentity\"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+metaHtml(r)"
-          new2="+(r.opportunityScore!=null?'<div class=\"opportunityIdentity\"><b>OPPORTUNITÀ</b> · '+esc(r.opportunityScore)+'/100</div>':'')+(outreachPriority(r)?'<div class=\"outreachPriority '+outreachPriority(r).cls+'\">'+outreachPriority(r).label+'</div>':'')+metaHtml(r)"
-          if old2 not in s: raise SystemExit('opportunity UI marker mismatch')
-          s=s.replace(old2,new2,1)
-          css=".outreachPriority{display:inline-flex;margin-top:7px;padding:5px 8px;border-radius:999px;font-size:9px;font-weight:900;letter-spacing:.08em}.outreachPriority.high{color:var(--green);border:1px solid rgba(105,240,181,.3);background:rgba(105,240,181,.09)}.outreachPriority.medium{color:var(--amber);border:1px solid rgba(255,209,102,.28);background:rgba(255,209,102,.08)}\n"
-          marker="/* v0.4.0F Premium Result Cards */"
-          if marker not in s: raise SystemExit('css marker mismatch')
-          s=s.replace(marker,css+'\n'+marker,1)
-          if "const VERSION = 'RADAR v0.4.7.19 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.19 Cloud';","const VERSION = 'RADAR v0.4.7.20 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.19</div>','<div class="version">v0.4.7.20</div>',1)
+          if "const VERSION = 'RADAR v0.4.7.20 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.20 Cloud';","const VERSION = 'RADAR v0.4.7.21 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.20</div>','<div class="version">v0.4.7.21</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.20 Cloud" worker.js
-          grep -q "function outreachPriority" worker.js
+          grep -q "RADAR v0.4.7.21 Cloud" worker.js
+          grep -q "const visibleConfidences=\[\]" worker.js
+          grep -q "if(r.email)visibleConfidences.push" worker.js
+          grep -q "if(r.instagram)visibleConfidences.push" worker.js
+          grep -q "if(r.submission)visibleConfidences.push" worker.js
+          grep -q "if(r.site)visibleConfidences.push" worker.js
           grep -q "PRIORITÀ OUTREACH" worker.js
           grep -q "BUONA OPPORTUNITÀ" worker.js
           grep -q "opportunityScore" worker.js
@@ -48,11 +44,11 @@ jobs:
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.20</div>' worker.js
+          grep -q '<div class="version">v0.4.7.21</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.20 outreach priority" || exit 0
+          git commit -m "RADAR v0.4.7.21 visible contact priority" || exit 0
           git push
