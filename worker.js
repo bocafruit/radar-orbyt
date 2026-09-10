@@ -1,6 +1,7 @@
-const VERSION = 'RADAR v0.4.5 Cloud';
+const VERSION = 'RADAR v0.4.6 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
+const TAVILY_API = 'https://api.tavily.com/search';
 
 const HTML = `<!doctype html>
 <html lang="it">
@@ -69,7 +70,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.5</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.6</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -303,7 +304,7 @@ async function discover(){
     if(payload.objective!=='contact'){
       render(candidates);
       scanFinish(t('discoveryComplete'),candidates.length+' '+t('playlistsFound'),{candidates:candidates.length,checked:candidates.length,contacts:0,google:googleUsed});
-      $('#status').textContent='Brave '+(base.braveConfigured?'ON':'OFF')+' · Google '+(base.serpapiConfigured?'ON':'OFF')+' · '+candidates.length+' playlist';
+      $('#status').textContent='Brave '+(base.providers?.brave?.ready?'ON':base.braveConfigured?'LIMIT':'OFF')+' · Tavily '+(base.providers?.tavily?.ready?'ON':base.tavilyConfigured?'LIMIT':'OFF')+' · Google '+(base.providers?.serpapi?.ready?'ON':base.serpapiConfigured?'LIMIT':'OFF')+' · '+candidates.length+' playlist';
       return;
     }
     if(!candidates.length){
@@ -342,7 +343,7 @@ async function discover(){
 }
 
 $('#discover').addEventListener('click',discover);
-$('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/health').then(r=>r.json());$('#status').textContent=d.version+' · Brave '+(d.braveConfigured?'ON':'OFF')+' · Google '+(d.serpapiConfigured?'ON':'OFF')+' · DB '+(d.dbConfigured?'ON':'OFF')}catch(e){$('#status').textContent=t('healthFailed')}});
+$('#health').addEventListener('click',async()=>{try{const d=await fetch('/api/health').then(r=>r.json());$('#status').textContent=d.version+' · Brave '+(d.providers?.brave?.ready?'ON':d.braveConfigured?'LIMIT':'OFF')+' · Tavily '+(d.providers?.tavily?.ready?'ON':d.tavilyConfigured?'LIMIT':'OFF')+' · Google '+(d.providers?.serpapi?.ready?'ON':d.serpapiConfigured?'LIMIT':'OFF')+' · DB '+(d.dbConfigured?'ON':'OFF')}catch(e){$('#status').textContent=t('healthFailed')}});
 
 const I18N={
 it:{
@@ -437,28 +438,91 @@ function contactEvidence(results,playlistName){
   return{email:best(emailMap),instagram:best(igMap),submission:best(subMap),site:best(siteMap),rows};
 }
 
-async function braveSearch(query,env,count=10){if(!env.BRAVE_API_KEY)return[];const u=new URL(BRAVE_API);u.searchParams.set('q',query);u.searchParams.set('count',String(Math.min(20,count)));u.searchParams.set('safesearch','moderate');const r=await fetch(u,{headers:{Accept:'application/json','Accept-Encoding':'gzip','X-Subscription-Token':env.BRAVE_API_KEY}});if(!r.ok)throw new Error('Brave API HTTP '+r.status);const d=await r.json();return (d.web&&d.web.results)||[]}
+const providerDownUntil=new Map();
 
-async function serpSearch(query,env,count=10){
-  if(!env.SERPAPI_KEY)return[];
-  const u=new URL(SERPAPI_API);
-  u.searchParams.set('engine','google');
-  u.searchParams.set('q',query);
-  u.searchParams.set('api_key',env.SERPAPI_KEY);
-  u.searchParams.set('num',String(Math.min(10,count)));
-  u.searchParams.set('hl','en');
-  u.searchParams.set('safe','active');
-  const r=await fetch(u,{headers:{Accept:'application/json'}});
-  if(!r.ok)throw new Error('SerpAPI HTTP '+r.status);
-  const d=await r.json();
-  if(d.error)throw new Error('SerpAPI: '+d.error);
-  return (d.organic_results||[]).map(x=>({
-    title:x.title||'',
-    description:x.snippet||'',
-    url:x.link||''
-  }));
+function nextMonthEpoch(){
+  const d=new Date();
+  return Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1,0,5,0);
+}
+function markProviderDown(name,until){providerDownUntil.set(name,until)}
+function providerReady(name){return !providerDownUntil.has(name)||Date.now()>=providerDownUntil.get(name)}
+
+async function braveSearch(query,env,count=10){
+  if(!env.BRAVE_API_KEY||!providerReady('brave'))return[];
+  const u=new URL(BRAVE_API);
+  u.searchParams.set('q',query);u.searchParams.set('count',String(Math.min(20,count)));u.searchParams.set('safesearch','moderate');
+  const r=await fetch(u,{headers:{Accept:'application/json','Accept-Encoding':'gzip','X-Subscription-Token':env.BRAVE_API_KEY}});
+  if(!r.ok){
+    let body='';try{body=await r.text()}catch(e){}
+    const quota=r.status===402||r.status===429||/quota|limit|usage|subscription|credit/i.test(body);
+    if(quota)markProviderDown('brave',r.status===429?Date.now()+60*60*1000:nextMonthEpoch());
+    const e=new Error('Brave API HTTP '+r.status);e.provider='brave';e.quota=quota;throw e;
+  }
+  const d=await r.json();return (d.web&&d.web.results)||[];
 }
 
+async function tavilySearch(query,env,count=10){
+  if(!env.TAVILY_API_KEY||!providerReady('tavily'))return[];
+  const r=await fetch(TAVILY_API,{
+    method:'POST',
+    headers:{Accept:'application/json','Content-Type':'application/json','Authorization':'Bearer '+env.TAVILY_API_KEY},
+    body:JSON.stringify({query,search_depth:'basic',max_results:Math.min(20,count),topic:'general',include_answer:false,include_raw_content:false,include_images:false,safe_search:true})
+  });
+  if(!r.ok){
+    let body='';try{body=await r.text()}catch(e){}
+    const quota=r.status===432||r.status===433||/usage limit|pay-as-you-go limit|credit|quota/i.test(body);
+    if(quota)markProviderDown('tavily',nextMonthEpoch());
+    else if(r.status===429)markProviderDown('tavily',Date.now()+15*60*1000);
+    const e=new Error('Tavily API HTTP '+r.status);e.provider='tavily';e.quota=quota;throw e;
+  }
+  const d=await r.json();
+  return (d.results||[]).map(x=>({title:x.title||'',description:x.content||'',url:x.url||''}));
+}
+
+async function serpSearch(query,env,count=10){
+  if(!env.SERPAPI_KEY||!providerReady('serpapi'))return[];
+  const u=new URL(SERPAPI_API);
+  u.searchParams.set('engine','google');u.searchParams.set('q',query);u.searchParams.set('api_key',env.SERPAPI_KEY);
+  u.searchParams.set('num',String(Math.min(10,count)));u.searchParams.set('hl','en');u.searchParams.set('safe','active');
+  const r=await fetch(u,{headers:{Accept:'application/json'}});
+  if(!r.ok){
+    let body='';try{body=await r.text()}catch(e){}
+    const quota=r.status===429||/credits|quota|limit|plan/i.test(body);
+    if(quota)markProviderDown('serpapi',nextMonthEpoch());
+    const e=new Error('SerpAPI HTTP '+r.status);e.provider='serpapi';e.quota=quota;throw e;
+  }
+  const d=await r.json();
+  if(d.error){
+    if(/credits|quota|limit|plan/i.test(d.error))markProviderDown('serpapi',nextMonthEpoch());
+    throw new Error('SerpAPI: '+d.error);
+  }
+  return (d.organic_results||[]).map(x=>({title:x.title||'',description:x.snippet||'',url:x.link||''}));
+}
+
+async function smartSearch(query,env,count=10){
+  const tried=[];
+  if(env.BRAVE_API_KEY&&providerReady('brave')){
+    tried.push('Brave');
+    try{const results=await braveSearch(query,env,count);if(results.length)return{results,provider:'Brave',tried}}catch(e){}
+  }
+  if(env.TAVILY_API_KEY&&providerReady('tavily')){
+    tried.push('Tavily');
+    try{const results=await tavilySearch(query,env,count);if(results.length)return{results,provider:'Tavily',tried}}catch(e){}
+  }
+  if(env.SERPAPI_KEY&&providerReady('serpapi')){
+    tried.push('Google');
+    try{const results=await serpSearch(query,env,count);if(results.length)return{results,provider:'Google',tried}}catch(e){}
+  }
+  return{results:[],provider:'None',tried};
+}
+
+function providerStatus(env){
+  return{
+    brave:{configured:!!env.BRAVE_API_KEY,ready:!!env.BRAVE_API_KEY&&providerReady('brave')},
+    tavily:{configured:!!env.TAVILY_API_KEY,ready:!!env.TAVILY_API_KEY&&providerReady('tavily')},
+    serpapi:{configured:!!env.SERPAPI_KEY,ready:!!env.SERPAPI_KEY&&providerReady('serpapi')}
+  };
+}
 
 function buildQueries(input){const genre=String(input.genre||'').trim();const artists=String(input.artists||'').split(',').map(s=>s.trim()).filter(Boolean).slice(0,3);const q=[];if(genre){q.push('site:open.spotify.com/playlist "'+genre+'" playlist');q.push('"'+genre+'" "Spotify playlist" submissions curator')}for(const a of artists)q.push('"'+a+'" "'+genre+'" Spotify playlist');if(input.mode==='complete'){q.push('"'+genre+'" playlist curator Instagram');for(const a of artists)q.push('"'+a+'" playlist curator submit music')}return unique(q).slice(0,input.mode==='complete'?7:4)}
 
@@ -499,8 +563,9 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
     '"'+raw+'" playlist submit music submission contact',
     '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
   ];
-  const braveBatches=await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[])));
-  let results=braveBatches.flat();
+  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
+  let results=smartBatches.flatMap(x=>x.results);
+  const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
   let ev=contactEvidence(results,c.name);
   let ct=contactabilityFromEvidence(ev);
   let googleUsed=0;
@@ -514,16 +579,16 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
     }
     googleUsed=1;
   }
-  return{result:rescoreContactFirst({...c,...ct,searchSources:googleUsed?'Brave + Google':'Brave'},input),googleUsed};
+  return{result:rescoreContactFirst({...c,...ct,searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
 }
 
 async function discoverBase(input,env){
   const genre=String(input.genre||'').trim();
-  if(!genre)return{braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed:0,candidates:[]};
-  if(!env.BRAVE_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,serpapiConfigured:false,googleUsed:0,candidates:[]};
+  if(!genre)return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed:0,candidates:[]};
+  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,googleUsed:0,candidates:[]};
   const queries=buildQueries(input);
-  const braveBatches=env.BRAVE_API_KEY?await Promise.all(queries.map(q=>braveSearch(q,env,input.mode==='complete'?12:10).catch(()=>[]))):[];
-  let rawResults=braveBatches.flat();
+  const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
+  let rawResults=smartBatches.flatMap(x=>x.results);
   let googleUsed=0;
   const desired=input.mode==='complete'?10:5;
   const initialSpotifyCount=unique(rawResults.map(r=>cleanPlaylistUrl(r.url)||cleanPlaylistUrl(r.description)||cleanPlaylistUrl(r.title))).length;
@@ -544,11 +609,11 @@ async function discoverBase(input,env){
   let candidates=[...map.values()].sort((a,b)=>b.score-a.score);
   const cap=input.mode==='complete'?18:9;
   candidates=candidates.slice(0,cap);
-  return{braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,candidates};
+  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,candidates,providers:providerStatus(env)};
 }
 
 async function enrichContactBatch(input,env){
-  if(!env.BRAVE_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,serpapiConfigured:false,googleUsed:0,results:[]};
+  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{braveConfigured:false,tavilyConfigured:false,serpapiConfigured:false,googleUsed:0,results:[]};
   const candidates=Array.isArray(input.candidates)?input.candidates.slice(0,3):[];
   let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
   let googleUsed=0;
@@ -558,7 +623,7 @@ async function enrichContactBatch(input,env){
     results.push(pack.result);
     if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}
   }
-  return{braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results};
+  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};
 }
 
 async function discover(input,env){
@@ -579,7 +644,7 @@ async function discover(input,env){
 }
 
 async function discoverCurator(input,env){
-  if(!env.BRAVE_API_KEY)return{curator:'',email:'',instagram:'',instagramHandle:'',submission:'',site:'',curatorMatch:0,curatorConfidence:0,emailConfidence:0,instagramConfidence:0,submissionConfidence:0,siteConfidence:0,reason:'BRAVE_API_KEY non configurata.'};
+  if(!env.BRAVE_API_KEY&&!env.TAVILY_API_KEY&&!env.SERPAPI_KEY)return{curator:'',email:'',instagram:'',instagramHandle:'',submission:'',site:'',curatorMatch:0,curatorConfidence:0,emailConfidence:0,instagramConfidence:0,submissionConfidence:0,siteConfidence:0,reason:'Nessun motore di ricerca configurato.'};
   const name=String(input.playlistName||'').trim();
   if(!name)throw new Error('Nome playlist mancante');
   const queries=[
@@ -588,8 +653,8 @@ async function discoverCurator(input,env){
     '"'+name+'" curator contact official',
     '"'+name+'" playlist website'
   ];
-  const batches=await Promise.all(queries.map(q=>braveSearch(q,env,10).catch(()=>[])));
-  let results=batches.flat();
+  const batches=await Promise.all(queries.map(q=>smartSearch(q,env,10)));
+  let results=batches.flatMap(x=>x.results);
   let ev=contactEvidence(results,name);
   let pre=contactabilityFromEvidence(ev);
   if(env.SERPAPI_KEY && pre.contactability<30){
@@ -820,7 +885,7 @@ export default {async fetch(request,env){const url=new URL(request.url);
         catch(e){return json({ok:false,error:String(e.message||e)},400)}
       }
 if(url.pathname==='/api/validate-links'&&request.method==='POST'){try{return json(await validateLinks(await request.json()))}catch(e){return json({error:'Link validation failed'},500)}}
-if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,dbConfigured:!!env.DB});
+if(url.pathname==='/api/health')return json({ok:true,version:VERSION,braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,providers:providerStatus(env),dbConfigured:!!env.DB});
 if(url.pathname==='/api/discover-base'&&request.method==='POST'){try{return json(await discoverBase(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery base'},500)}}
 if(url.pathname==='/api/contact-enrich'&&request.method==='POST'){try{return json(await enrichContactBatch(await request.json(),env))}catch(e){return json({error:e.message||'Errore contact enrich'},500)}}
 if(url.pathname==='/api/discover'&&request.method==='POST'){try{return json(await discover(await request.json(),env))}catch(e){return json({error:e.message||'Errore discovery'},500)}}if(url.pathname==='/api/curator'&&request.method==='POST'){try{return json(await discoverCurator(await request.json(),env))}catch(e){return json({error:e.message||'Errore curator discovery'},500)}}if(url.pathname==='/'||url.pathname==='/index.html')return new Response(HTML,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store'}});return new Response('Not Found',{status:404})}};
