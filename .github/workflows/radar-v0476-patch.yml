@@ -16,20 +16,24 @@ jobs:
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          old="""  let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
-  let googleUsed=0;
-  const results=[];
-  for(const c of candidates){
-    const pack=await deepContactForCandidate(c,input,env,slots>0);
-    results.push(pack.result);
-    if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}
-  }
-  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"""
-          new="""  const slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));
-  const packs=await Promise.all(candidates.map((c,i)=>deepContactForCandidate(c,input,env,i<slots)));
-  const results=packs.map(pack=>pack.result);
-  const googleUsed=packs.reduce((n,pack)=>n+Number(pack.googleUsed||0),0);
-  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"""
+          old='\n'.join([
+            "  let slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));",
+            "  let googleUsed=0;",
+            "  const results=[];",
+            "  for(const c of candidates){",
+            "    const pack=await deepContactForCandidate(c,input,env,slots>0);",
+            "    results.push(pack.result);",
+            "    if(pack.googleUsed){googleUsed+=pack.googleUsed;slots-=pack.googleUsed}",
+            "  }",
+            "  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"
+          ])
+          new='\n'.join([
+            "  const slots=Math.max(0,Math.min(3,Number(input.googleSlots||0)));",
+            "  const packs=await Promise.all(candidates.map((c,i)=>deepContactForCandidate(c,input,env,i<slots)));",
+            "  const results=packs.map(pack=>pack.result);",
+            "  const googleUsed=packs.reduce((n,pack)=>n+Number(pack.googleUsed||0),0);",
+            "  return{braveConfigured:!!env.BRAVE_API_KEY,tavilyConfigured:!!env.TAVILY_API_KEY,serpapiConfigured:!!env.SERPAPI_KEY,googleUsed,results,providers:providerStatus(env)};"
+          ])
           if old not in s: raise SystemExit('enrichContactBatch marker mismatch')
           s=s.replace(old,new,1)
           if "const VERSION = 'RADAR v0.4.7.17 Cloud';" not in s: raise SystemExit('version marker missing')
