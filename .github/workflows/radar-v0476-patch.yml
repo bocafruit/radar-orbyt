@@ -1,4 +1,4 @@
-name: RADAR rollback v0.4.7.24
+name: RADAR v0.4.7.25
 on:
   push:
     paths:
@@ -6,29 +6,65 @@ on:
 permissions:
   contents: write
 jobs:
-  rollback:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Restore stable worker
+      - name: Add priority outreach toggle only
         run: |
-          git show 1c82b8cd6d7f3745db1814194a55794c4d2e9b85:worker.js > worker.js
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          old=".outreachPriority.medium{color:var(--amber);border:1px solid rgba(255,209,102,.28);background:rgba(255,209,102,.08)}"
+          new=old+".outreachPriority.selected{color:#07120b!important;background:var(--green)!important;border-color:var(--green)!important;box-shadow:0 0 16px rgba(105,240,181,.22)}"
+          if old not in s: raise SystemExit('priority css marker mismatch')
+          s=s.replace(old,new,1)
+          old_btn="+(outreachPriority(r)?'<button type=\"button\" class=\"outreachPriority '+outreachPriority(r).cls+'\" data-priority-index=\"'+i+'\" onclick=\"priorityOutreach(sortedFilteredResults()[Number(this.dataset.priorityIndex)])\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
+          new_btn="+(outreachPriority(r)?'<button type=\"button\" class=\"outreachPriority '+outreachPriority(r).cls+(r.email&&selectedOutreach.has(keyFor(r))?' selected':'')+'\" data-priority-index=\"'+i+'\" onclick=\"priorityOutreach(sortedFilteredResults()[Number(this.dataset.priorityIndex)])\">'+outreachPriority(r).label+' →</button>':'')+metaHtml(r)"
+          if old_btn not in s: raise SystemExit('priority button marker mismatch')
+          s=s.replace(old_btn,new_btn,1)
+          old_fn="""function priorityOutreach(r){
+  if(!r)return;
+  if(r.email){
+    const k=keyFor(r);
+    selectedOutreach.set(k,r);
+    updateOutreachBar();
+    const bar=$('#outreachBar');if(bar)bar.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return;
+  }"""
+          new_fn="""function priorityOutreach(r){
+  if(!r)return;
+  if(r.email){
+    const k=keyFor(r);
+    if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);
+    paintResults(sortedFilteredResults());
+    updateOutreachBar();
+    const bar=$('#outreachBar');if(bar&&selectedOutreach.has(k))bar.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return;
+  }"""
+          if old_fn not in s: raise SystemExit('priority function marker mismatch')
+          s=s.replace(old_fn,new_fn,1)
+          if "const VERSION = 'RADAR v0.4.7.24 Cloud';" not in s: raise SystemExit('version marker mismatch')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.24 Cloud';","const VERSION = 'RADAR v0.4.7.25 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.24</div>','<div class="version">v0.4.7.25</div>',1)
+          p.write_text(s)
+          PY
       - name: Syntax and canary check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.24 Cloud" worker.js
+          grep -q "RADAR v0.4.7.25 Cloud" worker.js
           grep -q "function updateClock" worker.js
           grep -q "$('#health').addEventListener" worker.js
-          grep -q "function priorityOutreach" worker.js
+          grep -q "if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);" worker.js
+          grep -q "outreachPriority.selected" worker.js
           grep -q "onclick=\"priorityOutreach" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
-      - name: Commit rollback
+      - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "Rollback RADAR to stable v0.4.7.24" || exit 0
+          git commit -m "RADAR v0.4.7.25 outreach toggle only" || exit 0
           git push
