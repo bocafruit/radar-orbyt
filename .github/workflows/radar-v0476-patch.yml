@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.14
+name: RADAR v0.4.7.15
 'on':
   push:
     paths:
@@ -10,73 +10,85 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Owner-led contact verification
+      - name: Add contact confidence badges
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          start=s.index('async function deepContactForCandidate(c,input,env,allowGoogle=false){')
-          end=s.index('\nasync function discoverBase(input,env){',start)
-          new='''async function deepContactForCandidate(c,input,env,allowGoogle=false){
-            const raw=String(c.name||'').replace(/"/g,'').trim();
-            const genre=String(input.genre||'').replace(/"/g,'').trim();
-            const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);
-            const owner=String(spotify?.owner||'').replace(/"/g,'').trim();
-            const queries=owner?[
-              '"'+owner+'" "'+raw+'" Spotify playlist contact email Instagram',
-              '"'+owner+'" playlist submit music submission contact',
-              '"'+owner+'" "'+raw+'" website Instagram',
-              '"'+raw+'" Spotify playlist curator contact email submission'
-            ]:[
-              '"'+raw+'" Spotify playlist curator contact email Instagram',
-              '"'+raw+'" playlist submit music submission contact',
-              '"'+raw+'" playlist website curator '+(genre?'"'+genre+'"':'')
-            ];
-            const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
-            let results=smartBatches.flatMap(x=>x.results);
-            const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
-            let ev=contactEvidence(results,owner||c.name);
-            let ct=contactabilityFromEvidence(ev);
-            let googleUsed=0;
-            if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
-              const googleQuery=owner?'"'+owner+'" "'+raw+'" playlist email Instagram submit music contact':'"'+raw+'" Spotify playlist curator email Instagram submit music contact';
-              const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
-              if(googleResults.length){
-                results=results.concat(googleResults);
-                ev=contactEvidence(results,owner||c.name);
-                ct=contactabilityFromEvidence(ev);
-              }
-              googleUsed=1;
-            }
-            const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);
-            const curator=owner||webCurator;
-            const contactTarget=owner?'Spotify owner':'Playlist';
-            return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:owner?'Spotify':'Web',contactTarget,spotifyOwnerVerified:!!owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};
-          }
-          '''
-          s=s[:start]+new+s[end:]
-          if "const VERSION = 'RADAR v0.4.7.13 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.13 Cloud';","const VERSION = 'RADAR v0.4.7.14 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.13</div>','<div class="version">v0.4.7.14</div>',1)
+
+          css_marker=".contactAction{flex:0 0 auto;text-decoration:none;border:1px solid #344"
+          if css_marker not in s: raise SystemExit('contactAction CSS marker missing')
+          css_add=".contactConfidence{display:inline-flex;align-items:center;margin-left:6px;padding:3px 6px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.05em;vertical-align:middle}.contactConfidence.high{color:var(--green);background:rgba(105,240,181,.09);border:1px solid rgba(105,240,181,.22)}.contactConfidence.medium{color:var(--amber);background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.22)}.contactConfidence.low{color:#aab2d6;background:#14192b;border:1px solid #353d62}"
+          s=s.replace(css_marker,css_add+css_marker,1)
+
+          old="""function contactCard(label,value,action,href,r){
+  if(!value)return '';
+  if(action==='email'){
+    const sel=selectedOutreach.has(keyFor(r));
+    return '<div class=\"contactItem\"><a class=\"contactAction emailOpen\" href=\"mailto:'+encodeURIComponent(value)+'\">✉ '+t('email')+'</a><button class=\"selectContact '+(sel?'selected':'')+'\" data-select-email=\"'+esc(value)+'\" title=\"'+t('addToList')+'\">'+(sel?'✓':'+')+'</button></div>';
+  }
+  if(!href)return '';
+  const kind=action==='submission'?'submission':'site';
+  return '<div class=\"contactItem\"><a class=\"contactAction pending\" data-verify-kind=\"'+kind+'\" data-verify-url=\"'+esc(href)+'\" target=\"_blank\" rel=\"noopener\" href=\"'+esc(href)+'\">'+label+' <span class=\"verifiedDot\" style=\"display:none\">✓</span></a></div>';
+}
+function visibleContacts(r){
+  const rows=[];
+  rows.push(contactCard('Email',r.email,'email','',r));
+  rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'site',r.instagram,r));
+  rows.push(contactCard(t('submission'),r.submission,'submission',r.submission,r));
+  rows.push(contactCard(t('site'),r.site,'site',r.site,r));
+"""
+          new="""function contactConfidenceBadge(score){
+  const n=Number(score)||0;
+  const level=n>=75?'high':n>=50?'medium':'low';
+  const label=n>=75?'ALTA':n>=50?'MEDIA':'BASSA';
+  return '<span class=\"contactConfidence '+level+'\">'+label+'</span>';
+}
+function contactCard(label,value,action,href,r,confidence){
+  if(!value)return '';
+  const conf=contactConfidenceBadge(confidence);
+  if(action==='email'){
+    const sel=selectedOutreach.has(keyFor(r));
+    return '<div class=\"contactItem\"><a class=\"contactAction emailOpen\" href=\"mailto:'+encodeURIComponent(value)+'\">✉ '+t('email')+conf+'</a><button class=\"selectContact '+(sel?'selected':'')+'\" data-select-email=\"'+esc(value)+'\" title=\"'+t('addToList')+'\">'+(sel?'✓':'+')+'</button></div>';
+  }
+  if(!href)return '';
+  const kind=action==='submission'?'submission':'site';
+  return '<div class=\"contactItem\"><a class=\"contactAction pending\" data-verify-kind=\"'+kind+'\" data-verify-url=\"'+esc(href)+'\" target=\"_blank\" rel=\"noopener\" href=\"'+esc(href)+'\">'+label+conf+' <span class=\"verifiedDot\" style=\"display:none\">✓</span></a></div>';
+}
+function visibleContacts(r){
+  const rows=[];
+  rows.push(contactCard('Email',r.email,'email','',r,r.emailConfidence));
+  rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'site',r.instagram,r,r.instagramConfidence));
+  rows.push(contactCard(t('submission'),r.submission,'submission',r.submission,r,r.submissionConfidence));
+  rows.push(contactCard(t('site'),r.site,'site',r.site,r,r.siteConfidence));
+"""
+          if old not in s: raise SystemExit('contact card block mismatch')
+          s=s.replace(old,new,1)
+
+          if "const VERSION = 'RADAR v0.4.7.14 Cloud';" not in s: raise SystemExit('version marker missing')
+          s=s.replace("const VERSION = 'RADAR v0.4.7.14 Cloud';","const VERSION = 'RADAR v0.4.7.15 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.14</div>','<div class="version">v0.4.7.15</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.14 Cloud" worker.js
-          grep -q "const owner=String(spotify?.owner" worker.js
-          grep -q "contactTarget=owner?'Spotify owner':'Playlist'" worker.js
+          grep -q "RADAR v0.4.7.15 Cloud" worker.js
+          grep -q "contactConfidenceBadge" worker.js
+          grep -q "r.emailConfidence" worker.js
+          grep -q "r.submissionConfidence" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
+          grep -q "contactTarget=owner?'Spotify owner':'Playlist'" worker.js
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.14</div>' worker.js
+          grep -q '<div class="version">v0.4.7.15</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.14 owner-led contact verification" || exit 0
+          git commit -m "RADAR v0.4.7.15 contact confidence badges" || exit 0
           git push
