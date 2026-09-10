@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.11
+name: RADAR v0.4.7.12
 on:
   push:
     paths:
@@ -10,41 +10,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply Spotify evidence priority
+      - name: Add Spotify owner verification
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          changes=[
-            ("function guessCuratorName(playlistName,results){","function guessCuratorName(playlistName,results,spotifyUrl){"),
-            ("  const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];","  const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];\n  const spotifyId=(String(spotifyUrl||'').match(/open\\.spotify\\.com\\/playlist\\/([A-Za-z0-9]+)/i)||[])[1]||'';"),
-            ("  const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row)})};","  const exactSpotifyRow=r=>!!spotifyId&&new RegExp('open\\\\.spotify\\\\.com/playlist/'+spotifyId,'i').test(String(r.url||''));\n  const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row),spotifyExact:exactSpotifyRow(row)})};"),
-            ("    if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,sources:new Set(),playlistSources:new Set()});","    if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,spotifyExact:false,sources:new Set(),playlistSources:new Set()});"),
-            ("    const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.sources.add(h.source);","    const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.spotifyExact=g.spotifyExact||h.spotifyExact;g.sources.add(h.source);"),
-            ("    score:(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)","    score:(g.spotifyExact?220:0)+(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)"),
-            ("  })).filter(g=>(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);","  })).filter(g=>(g.spotifyExact&&g.strongTitle)||(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"),
-            ("curator:guessCuratorName(c.name,results),searchSources:","curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:"),
-            ("const VERSION = 'RADAR v0.4.7.10 Cloud';","const VERSION = 'RADAR v0.4.7.11 Cloud';"),
-            ('<div class="version">v0.4.7.10</div>','<div class="version">v0.4.7.11</div>')
-          ]
-          for old,new in changes:
-            if old not in s:
-              raise SystemExit('Expected marker not found: '+old[:80])
-            s=s.replace(old,new,1)
+          marker="async function deepContactForCandidate(c,input,env,allowGoogle=false){"
+          helper="""let spotifyTokenCache={token:'',expiresAt:0};
+
+async function spotifyAccessToken(env){
+  if(!env.SPOTIFY_CLIENT_ID||!env.SPOTIFY_CLIENT_SECRET)return'';
+  if(spotifyTokenCache.token&&Date.now()<spotifyTokenCache.expiresAt-60000)return spotifyTokenCache.token;
+  const basic=btoa(env.SPOTIFY_CLIENT_ID+':'+env.SPOTIFY_CLIENT_SECRET);
+  const r=await fetch('https://accounts.spotify.com/api/token',{
+    method:'POST',
+    headers:{'Authorization':'Basic '+basic,'Content-Type':'application/x-www-form-urlencoded'},
+    body:'grant_type=client_credentials'
+  });
+  if(!r.ok)return'';
+  const d=await r.json();
+  const token=String(d.access_token||'');
+  if(token)spotifyTokenCache={token,expiresAt:Date.now()+Math.max(60,Number(d.expires_in||3600))*1000};
+  return token;
+}
+
+async function spotifyPlaylistIdentity(spotifyUrl,env){
+  const m=String(spotifyUrl||'').match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/i);
+  if(!m)return null;
+  const token=await spotifyAccessToken(env);
+  if(!token)return null;
+  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(m[1])+'?fields=id,name,owner(display_name,id,external_urls),external_urls';
+  const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
+  if(!r.ok)return null;
+  const d=await r.json();
+  return{playlistId:String(d.id||m[1]),name:String(d.name||''),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
+}
+
+"""
+          if marker not in s: raise SystemExit('deep contact marker not found')
+          s=s.replace(marker,helper+marker,1)
+          old="  return{result:rescoreContactFirst({...c,...ct,curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
+          new="  const spotify=await spotifyPlaylistIdentity(c.spotifyUrl,env).catch(()=>null);\n  const webCurator=guessCuratorName(c.name,results,c.spotifyUrl);\n  const curator=spotify?.owner||webCurator;\n  return{result:rescoreContactFirst({...c,...ct,curator,curatorSource:spotify?.owner?'Spotify':'Web',spotifyOwnerVerified:!!spotify?.owner,spotifyOwnerId:spotify?.ownerId||'',spotifyOwnerUrl:spotify?.ownerUrl||'',spotifyCanonicalName:spotify?.name||'',searchSources:unique(primaryProviders.concat(googleUsed?['Google']:[])).join(' + ')||'Search'},input),googleUsed};"
+          if old not in s: raise SystemExit('deep contact return marker not found')
+          s=s.replace(old,new,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.11 Cloud';","const VERSION = 'RADAR v0.4.7.12 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.11</div>','<div class="version">v0.4.7.12</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.11 Cloud" worker.js
-          grep -q "guessCuratorName(c.name,results,c.spotifyUrl)" worker.js
-          grep -q "spotifyExact" worker.js
-          grep -q '<div class="version">v0.4.7.11</div>' worker.js
+          grep -q "RADAR v0.4.7.12 Cloud" worker.js
+          grep -q "spotifyPlaylistIdentity" worker.js
+          grep -q "spotifyOwnerVerified" worker.js
+          grep -q "curatorSource:spotify?.owner?'Spotify':'Web'" worker.js
+          grep -q '<div class="version">v0.4.7.12</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.11 Spotify evidence priority" || exit 0
+          git commit -m "RADAR v0.4.7.12 Spotify owner verification" || exit 0
           git push
