@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.2 Cloud';
+const VERSION = 'RADAR v0.4.7.3 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -67,13 +67,11 @@ const HTML = `<!doctype html>
 .spotifyIcon{width:15px;height:15px;display:inline-block;vertical-align:-3px;margin-right:5px}
 @media(max-width:560px){.brand h1{font-size:27px}.dateClock{min-width:76px;padding:6px}.dateClock .clockDate{font-size:7px}.dateClock .clockTime{font-size:10px}}
 
-
-.curatorIdentity{margin-top:5px;font-size:10px;line-height:1.25;color:#8f99bb;letter-spacing:.055em;text-transform:none}
-.curatorIdentity b{color:#b8c1df;font-weight:800;letter-spacing:.08em}
+.curatorIdentity{margin-top:5px;font-size:10px;line-height:1.25;color:#8f99bb;letter-spacing:.045em}.curatorIdentity b{color:#b8c1df;font-weight:800;letter-spacing:.08em}
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.2</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.3</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -127,14 +125,16 @@ function cleanPlaylistName(raw){
   s=s.replace(/\s*[\|\u2022]\s*$/,'').trim();
   return s||String(raw||'');
 }
-function playlistIdentity(raw){
-  const original=String(raw||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
-  const m=original.match(/^(.*?)\s*[-–—:]\s*playlist\s+by\s+(.+?)\s*$/i);
-  let name=m&&m[1].trim()?m[1].trim():original;
-  const curator=m&&m[2].trim()?m[2].trim():'';
-  // Never allow a destructive/implausibly short transformation.
-  if(name.length<3 && original.length>=3) name=original;
-  return {name,curator};
+function displayPlaylistIdentity(r){
+  const raw=String((r&&r.sourceTitle)||'').replace(/<[^>]*>/g,' ').replace(/&amp;/gi,'&').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  const fallback=String((r&&r.name)||'').trim();
+  const source=raw||fallback;
+  const m=source.match(/^(.*?)\s*[-–—:]\s*playli(?:s)?t\s+by\s+(.+?)\s*$/i);
+  if(m){
+    const playlist=m[1].trim(),curator=m[2].trim();
+    if(playlist.length>=3&&curator.length>=2)return {name:playlist,curator};
+  }
+  return {name:fallback||source,curator:''};
 }
 
 function spotifySvg(){
@@ -257,7 +257,7 @@ async function loadPlaylistCovers(items){
 function paintResults(items){
   const box=$('#results');$('#count').textContent=items.length+' '+t('results');
   if(!items.length){box.innerHTML='<div class="empty">'+t('noFilteredResults')+'</div>';return}
-  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(playlistIdentity(r.name).name)+'</div>'+(playlistIdentity(r.name).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(playlistIdentity(r.name).curator)+'</div>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
+  box.innerHTML=items.map((r,i)=>'<article class="card"><div class="cardBody"><div class="cardMain"><div class="playlistCoverWrap"><div class="playlistCoverFallback">◉</div><img class="playlistCover" data-cover-index="'+i+'" alt="" loading="lazy" style="opacity:0" /></div><div class="playlistInfo"><div class="top"><div><div class="title">'+esc(displayPlaylistIdentity(r).name)+'</div>'+(displayPlaylistIdentity(r).curator?'<div class="curatorIdentity"><b>CURATOR</b> · '+esc(displayPlaylistIdentity(r).curator)+'</div>':'')+metaHtml(r)+'</div><span class="badge '+badgeClass(r.badge)+'">'+esc(badgeText(r.badge))+'</span></div>'+visibleContacts(r)+'<div class="cardActions"><a class="linkbtn" target="_blank" rel="noopener" href="'+esc(r.spotifyUrl)+'">'+spotifySvg()+t('spotify')+'</a></div></div></div></div></article>').join('');
   loadPlaylistCovers(items); verifyVisibleLinks();
 }
 function render(items){radarResults=items||[];paintResults(sortedFilteredResults())}
