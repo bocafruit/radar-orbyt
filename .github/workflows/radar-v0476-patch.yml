@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.15
+name: RADAR v0.4.7.16
 on:
   push:
     paths:
@@ -10,66 +10,44 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Add contact confidence badges
+      - name: Add owner and playlist evidence boost
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-          css_marker=".contactAction{flex:0 0 auto;text-decoration:none;border:1px solid #344"
-          css_add=".contactConfidence{display:inline-flex;align-items:center;margin-left:6px;padding:3px 6px;border-radius:999px;font-size:8px;font-weight:900;letter-spacing:.05em;vertical-align:middle}.contactConfidence.high{color:var(--green);background:rgba(105,240,181,.09);border:1px solid rgba(105,240,181,.22)}.contactConfidence.medium{color:var(--amber);background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.22)}.contactConfidence.low{color:#aab2d6;background:#14192b;border:1px solid #353d62}"
-          if css_marker not in s: raise SystemExit('CSS marker missing')
-          s=s.replace(css_marker,css_add+css_marker,1)
-          marker="function contactCard(label,value,action,href,r){"
-          helper='\n'.join([
-            "function contactConfidenceBadge(score){",
-            "  const n=Number(score)||0;",
-            "  const level=n>=75?'high':n>=50?'medium':'low';",
-            "  const label=n>=75?'ALTA':n>=50?'MEDIA':'BASSA';",
-            "  return '<span class=\"contactConfidence '+level+'\">'+label+'</span>';",
-            "}",
-            ""
-          ])
-          if marker not in s: raise SystemExit('contactCard marker missing')
-          s=s.replace(marker,helper+marker,1)
           changes=[
-            ("function contactCard(label,value,action,href,r){","function contactCard(label,value,action,href,r,confidence){"),
-            ("  if(!value)return '';\n  if(action==='email'){","  if(!value)return '';\n  const conf=contactConfidenceBadge(confidence);\n  if(action==='email'){"),
-            ("✉ '+t('email')+'</a><button","✉ '+t('email')+conf+'</a><button"),
-            ("href=\"'+esc(href)+'\">'+label+' <span class=\"verifiedDot\"","href=\"'+esc(href)+'\">'+label+conf+' <span class=\"verifiedDot\""),
-            ("rows.push(contactCard('Email',r.email,'email','',r));","rows.push(contactCard('Email',r.email,'email','',r,r.emailConfidence));"),
-            ("rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'site',r.instagram,r));","rows.push(contactCard('Instagram',r.instagramHandle||r.instagram,'site',r.instagram,r,r.instagramConfidence));"),
-            ("rows.push(contactCard(t('submission'),r.submission,'submission',r.submission,r));","rows.push(contactCard(t('submission'),r.submission,'submission',r.submission,r,r.submissionConfidence));"),
-            ("rows.push(contactCard(t('site'),r.site,'site',r.site,r));","rows.push(contactCard(t('site'),r.site,'site',r.site,r,r.siteConfidence));")
+            ("function contactEvidence(results,playlistName){","function contactEvidence(results,primaryName,playlistName=''){"),
+            ("  const name=normalize(playlistName), words=name.split(/\\s+/).filter(w=>w.length>=4);","  const name=normalize(primaryName), playlist=normalize(playlistName), words=name.split(/\\s+/).filter(w=>w.length>=4), playlistWords=playlist.split(/\\s+/).filter(w=>w.length>=4);"),
+            ("    if(name && text.includes(name)) assoc+=45;\n    const hits=words.filter(w=>text.includes(w)).length;\n    assoc+=Math.min(30,hits*10);\n    if(/spotify|playlist/.test(text)) assoc+=10;","    const ownerExact=!!name&&text.includes(name);\n    const playlistExact=!!playlist&&text.includes(playlist);\n    if(ownerExact)assoc+=45;\n    const hits=words.filter(w=>text.includes(w)).length;\n    assoc+=Math.min(30,hits*10);\n    if(playlistExact)assoc+=25;\n    const playlistHits=playlistWords.filter(w=>text.includes(w)).length;\n    assoc+=Math.min(20,playlistHits*5);\n    if(ownerExact&&playlistExact)assoc+=20;\n    if(/spotify|playlist/.test(text)) assoc+=10;"),
+            ("let ev=contactEvidence(results,owner||c.name);","let ev=contactEvidence(results,owner||c.name,c.name);"),
+            ("ev=contactEvidence(results,owner||c.name);","ev=contactEvidence(results,owner||c.name,c.name);"),
+            ("const VERSION = 'RADAR v0.4.7.15 Cloud';","const VERSION = 'RADAR v0.4.7.16 Cloud';"),
+            ('<div class="version">v0.4.7.15</div>','<div class="version">v0.4.7.16</div>')
           ]
           for old,new in changes:
-            if old not in s: raise SystemExit('Expected marker missing: '+old[:70])
+            if old not in s: raise SystemExit('Expected marker missing: '+old[:100])
             s=s.replace(old,new,1)
-          if "const VERSION = 'RADAR v0.4.7.14 Cloud';" not in s: raise SystemExit('version marker missing')
-          s=s.replace("const VERSION = 'RADAR v0.4.7.14 Cloud';","const VERSION = 'RADAR v0.4.7.15 Cloud';",1)
-          s=s.replace('<div class="version">v0.4.7.14</div>','<div class="version">v0.4.7.15</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.15 Cloud" worker.js
+          grep -q "RADAR v0.4.7.16 Cloud" worker.js
+          grep -q "contactEvidence(results,primaryName,playlistName='')" worker.js
+          grep -q "ownerExact&&playlistExact" worker.js
+          grep -q "contactEvidence(results,owner||c.name,c.name)" worker.js
           grep -q "contactConfidenceBadge" worker.js
-          grep -q "r.emailConfidence" worker.js
-          grep -q "r.instagramConfidence" worker.js
-          grep -q "r.submissionConfidence" worker.js
-          grep -q "r.siteConfidence" worker.js
           grep -q "spotifySearchPlaylists" worker.js
           grep -q "spotifyPlaylistIdentity" worker.js
-          grep -q "contactTarget=owner?'Spotify owner':'Playlist'" worker.js
           grep -q "BRAVE_API_KEY" worker.js
           grep -q "TAVILY_API_KEY" worker.js
           grep -q "SERPAPI_KEY" worker.js
-          grep -q '<div class="version">v0.4.7.15</div>' worker.js
+          grep -q '<div class="version">v0.4.7.16</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.15 contact confidence badges" || exit 0
+          git commit -m "RADAR v0.4.7.16 evidence boost" || exit 0
           git push
