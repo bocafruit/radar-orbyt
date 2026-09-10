@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.15 Cloud';
+const VERSION = 'RADAR v0.4.7.16 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -71,7 +71,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.15</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.16</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
@@ -483,14 +483,20 @@ function guessCuratorName(playlistName,results,spotifyUrl){
 function confidenceFromScore(n){return clamp(n,0,100)}
 function hostOf(url){try{return new URL(url).hostname.replace(/^www\./,'')}catch{return''}}
 function isGenericHost(h){return /^(open\.spotify\.com|spotify\.com|instagram\.com|facebook\.com|x\.com|twitter\.com|youtube\.com|tiktok\.com|soundcloud\.com)$/i.test(h)}
-function contactEvidence(results,playlistName){
-  const name=normalize(playlistName), words=name.split(/\s+/).filter(w=>w.length>=4);
+function contactEvidence(results,primaryName,playlistName=''){
+  const name=normalize(primaryName), playlist=normalize(playlistName), words=name.split(/\s+/).filter(w=>w.length>=4), playlistWords=playlist.split(/\s+/).filter(w=>w.length>=4);
   const rows=results.map(r=>{
     const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));
     let assoc=0;
-    if(name && text.includes(name)) assoc+=45;
+    const ownerExact=!!name&&text.includes(name);
+    const playlistExact=!!playlist&&text.includes(playlist);
+    if(ownerExact)assoc+=45;
     const hits=words.filter(w=>text.includes(w)).length;
     assoc+=Math.min(30,hits*10);
+    if(playlistExact)assoc+=25;
+    const playlistHits=playlistWords.filter(w=>text.includes(w)).length;
+    assoc+=Math.min(20,playlistHits*5);
+    if(ownerExact&&playlistExact)assoc+=20;
     if(/spotify|playlist/.test(text)) assoc+=10;
     return{r,text,assoc:clamp(assoc)};
   });
@@ -712,7 +718,7 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
   const smartBatches=await Promise.all(queries.map(q=>smartSearch(q,env,input.mode==='complete'?12:10)));
   let results=smartBatches.flatMap(x=>x.results);
   const primaryProviders=unique(smartBatches.map(x=>x.provider).filter(x=>x&&x!=='None'));
-  let ev=contactEvidence(results,owner||c.name);
+  let ev=contactEvidence(results,owner||c.name,c.name);
   let ct=contactabilityFromEvidence(ev);
   let googleUsed=0;
   if(allowGoogle && env.SERPAPI_KEY && ct.contactability<30){
@@ -720,7 +726,7 @@ async function deepContactForCandidate(c,input,env,allowGoogle=false){
     const googleResults=await serpSearch(googleQuery,env,10).catch(()=>[]);
     if(googleResults.length){
       results=results.concat(googleResults);
-      ev=contactEvidence(results,owner||c.name);
+      ev=contactEvidence(results,owner||c.name,c.name);
       ct=contactabilityFromEvidence(ev);
     }
     googleUsed=1;
