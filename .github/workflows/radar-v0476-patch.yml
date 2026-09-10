@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.10
+name: RADAR v0.4.7.11
 on:
   push:
     paths:
@@ -10,68 +10,59 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fix client regex escaping
+      - name: Prioritize exact Spotify evidence
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js')
           s=p.read_text()
-
-          html_start=s.index('const HTML = `')
-          html_end=s.index('</script></body></html>`;', html_start)
-          head=s[:html_start]
-          html=s[html_start:html_end]
-          tail=s[html_end:]
-
-          targets={
-            ".replace(/\\s+/g,' ')":".replace(/\\\\s+/g,' ')",
-            ".replace(/\\s*[-:]\\s*Spotify Playlist.*$/i,'')":".replace(/\\\\s*[-:]\\\\s*Spotify Playlist.*$/i,'')",
-            ".replace(/\\s*\\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission)\\].*$/i,'')":".replace(/\\\\s*\\\\[(?:Submit Music Here|Submit(?: Your)? Music|Playlist Submission)\\\\].*$/i,'')",
-            ".replace(/\\s*\\((?:Submit Music Here|Submit(?: Your)? Music)\\).*$/i,'')":".replace(/\\\\s*\\\\((?:Submit Music Here|Submit(?: Your)? Music)\\\\).*$/i,'')",
-            ".replace(/\\s*[\\|\\u2022]\\s*$/,'')":".replace(/\\\\s*[\\\\|\\\\u2022]\\\\s*$/,'')",
-            ".replace(/\\s*[|·]\\s*Spotify\\s*$/i,'')":".replace(/\\\\s*[|·]\\\\s*Spotify\\\\s*$/i,'')",
-            ".replace(/\\s*[-–—:]\\s*Spotify\\s*$/i,'')":".replace(/\\\\s*[-–—:]\\\\s*Spotify\\\\s*$/i,'')"
-          }
-          changed=0
-          for old,new in targets.items():
-            c=html.count(old)
-            if c:
-              html=html.replace(old,new)
-              changed+=c
-          if changed < 3:
-            raise SystemExit(f'Expected multiple client regex fixes, got {changed}; refusing unsafe patch')
-
-          old_visible='<div class="version">v0.4.7.4</div>'
-          if old_visible in html:
-            html=html.replace(old_visible,'<div class="version">v0.4.7.10</div>',1)
-
-          s=head+html+tail
-          old_version="const VERSION = 'RADAR v0.4.7.9 Cloud';"
-          if old_version not in s:
-            raise SystemExit('version target not found; refusing unsafe patch')
-          s=s.replace(old_version,"const VERSION = 'RADAR v0.4.7.10 Cloud';",1)
+          start=s.index('function guessCuratorName(playlistName,results){')
+          end=s.index('\nfunction confidenceFromScore',start)
+          old=s[start:end]
+          new=old
+          new=new.replace('function guessCuratorName(playlistName,results){','function guessCuratorName(playlistName,results,spotifyUrl){',1)
+          needle="const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];"
+          repl="const p=normalize(playlistName),rows=Array.isArray(results)?results:[],hits=[];\n            const spotifyId=(String(spotifyUrl||'').match(/open\\.spotify\\.com\\/playlist\\/([A-Za-z0-9]+)/i)||[])[1]||'';"
+          if needle not in new: raise SystemExit('curator header marker not found')
+          new=new.replace(needle,repl,1)
+          needle2="const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row)})};"
+          repl2="const exactSpotifyRow=r=>{const u=String(r.url||'');return !!spotifyId&&new RegExp('open\\\\.spotify\\\\.com/playlist/'+spotifyId,'i').test(u)};\n            const add=(name,row,strongTitle)=>{name=clean(name);if(valid(name))hits.push({name,row,strongTitle:!!strongTitle,source:sourceKey(row),spotifyExact:exactSpotifyRow(row)})};"
+          if needle2 not in new: raise SystemExit('curator add marker not found')
+          new=new.replace(needle2,repl2,1)
+          needle3="if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,sources:new Set(),playlistSources:new Set()});"
+          repl3="if(!groups.has(key))groups.set(key,{name:h.name,strongTitle:false,spotifyExact:false,sources:new Set(),playlistSources:new Set()});"
+          if needle3 not in new: raise SystemExit('group marker not found')
+          new=new.replace(needle3,repl3,1)
+          needle4="const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.sources.add(h.source);"
+          repl4="const g=groups.get(key);g.strongTitle=g.strongTitle||h.strongTitle;g.spotifyExact=g.spotifyExact||h.spotifyExact;g.sources.add(h.source);"
+          if needle4 not in new: raise SystemExit('group accumulation marker not found')
+          new=new.replace(needle4,repl4,1)
+          old_rank="score:(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)\n            })).filter(g=>(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"
+          new_rank="score:(g.spotifyExact?220:0)+(g.strongTitle?100:0)+(g.sources.size*30)+(g.playlistSources.size*20)\n            })).filter(g=>(g.spotifyExact&&g.strongTitle)||(g.strongTitle&&g.associated)||(g.independent&&g.associated)).sort((a,b)=>b.score-a.score||a.name.length-b.name.length);"
+          if old_rank not in new: raise SystemExit('rank marker not found')
+          new=new.replace(old_rank,new_rank,1)
+          s=s[:start]+new+s[end:]
+          call_old='curator:guessCuratorName(c.name,results),searchSources:'
+          call_new='curator:guessCuratorName(c.name,results,c.spotifyUrl),searchSources:'
+          if call_old not in s: raise SystemExit('deep contact curator call not found')
+          s=s.replace(call_old,call_new,1)
+          old_version="const VERSION = 'RADAR v0.4.7.10 Cloud';"
+          if old_version not in s: raise SystemExit('version marker not found')
+          s=s.replace(old_version,"const VERSION = 'RADAR v0.4.7.11 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.10</div>','<div class="version">v0.4.7.11</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression check
         run: |
           node --check worker.js
-          grep -q "RADAR v0.4.7.10 Cloud" worker.js
-          grep -q '<div class="version">v0.4.7.10</div>' worker.js
-          python - <<'PY'
-          from pathlib import Path
-          s=Path('worker.js').read_text()
-          a=s.index('const HTML = `')
-          b=s.index('</script></body></html>`;',a)
-          html=s[a:b]
-          if "String(d.title||'').replace(/\\\\s+/g,' ').trim()" not in html:
-            raise SystemExit('oEmbed whitespace regex is not double-escaped')
-          if "replace(/\\\\s+/g,' ').trim()" not in html:
-            raise SystemExit('client whitespace regex fix missing')
-          PY
+          grep -q "RADAR v0.4.7.11 Cloud" worker.js
+          grep -q "guessCuratorName(c.name,results,c.spotifyUrl)" worker.js
+          grep -q "spotifyExact" worker.js
+          grep -q '<div class="version">v0.4.7.11</div>' worker.js
       - name: Commit worker
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.10 fix frontend regex escaping" || exit 0
+          git commit -m "RADAR v0.4.7.11 Spotify evidence priority" || exit 0
           git push
