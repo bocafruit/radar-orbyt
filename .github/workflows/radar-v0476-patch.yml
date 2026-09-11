@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.33 stop search only
+name: RADAR v0.4.7.34 visible stop control fix
 on:
   push:
     paths:
@@ -10,33 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build v0.4.7.33 candidate
+      - name: Build v0.4.7.34 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.32 Cloud';" not in s: raise SystemExit('version mismatch')
-          old='<div class="actions"><button class="btn" id="discover" data-i18n="scan">Scansiona playlist</button><button class="btn secondary" id="health" data-i18n="health">Test sistema</button>'
-          new='<div class="actions"><button class="btn" id="discover" data-i18n="scan">Scansiona playlist</button><button class="btn secondary" id="stopScan" style="display:none" type="button">Stop ricerca</button><button class="btn secondary" id="health" data-i18n="health">Test sistema</button>'
-          if old not in s: raise SystemExit('actions anchor mismatch')
+          if "const VERSION = 'RADAR v0.4.7.33 Cloud';" not in s: raise SystemExit('version mismatch')
+          old='<button class="btn secondary" id="stopScan" style="display:none" type="button">Stop ricerca</button>'
+          new='<button class="btn secondary" id="stopScan" type="button" disabled>Stop ricerca</button>'
+          if old not in s: raise SystemExit('stop button anchor mismatch')
           s=s.replace(old,new,1)
-          old2="async function discover(){\n  const genreField=$('#genre');const genreValue=genreField.value.trim();"
-          new2="let radarAbortController=null;\nasync function discover(){\n  const genreField=$('#genre');const genreValue=genreField.value.trim();"
-          if old2 not in s: raise SystemExit('discover start mismatch')
+          old2="const stopBtn=$('#stopScan');if(stopBtn)stopBtn.style.display='inline-flex';radarAbortController=new AbortController();"
+          new2="const stopBtn=$('#stopScan');if(stopBtn)stopBtn.disabled=false;radarAbortController=new AbortController();"
+          if old2 not in s: raise SystemExit('stop activation mismatch')
           s=s.replace(old2,new2,1)
-          old3="  const b=$('#discover');b.disabled=true;\n  const payload="
-          new3="  const b=$('#discover');b.disabled=true;const stopBtn=$('#stopScan');if(stopBtn)stopBtn.style.display='inline-flex';radarAbortController=new AbortController();\n  const payload="
-          if old3 not in s: raise SystemExit('discover button mismatch')
+          old3="if(stopBtn)stopBtn.style.display='none';radarAbortController=null"
+          new3="if(stopBtn)stopBtn.disabled=true;radarAbortController=null"
+          if old3 not in s: raise SystemExit('stop reset mismatch')
           s=s.replace(old3,new3,1)
-          s=s.replace("fetch('/api/discover-base',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload)})","fetch('/api/discover-base',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(payload),signal:radarAbortController.signal})",1)
-          s=s.replace("fetch('/api/contact-enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,candidates:chunk,googleSlots:remainingGoogle})})","fetch('/api/contact-enrich',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,candidates:chunk,googleSlots:remainingGoogle}),signal:radarAbortController.signal})",1)
-          old4="  }catch(e){\n    scanError(e.message);\n    $('#results').innerHTML='<div class=\"empty error\">'+esc(e.message)+'</div>';\n    $('#status').textContent=t('error')+': '+e.message;\n  }finally{b.disabled=false}\n}\n\n$('#discover').addEventListener('click',discover);"
-          new4="  }catch(e){\n    if(e&&e.name==='AbortError'){clearInterval(scanClock);scanClock=null;$('#scanPanel').classList.remove('active');$('#status').textContent='Ricerca interrotta.';}else{scanError(e.message);$('#results').innerHTML='<div class=\"empty error\">'+esc(e.message)+'</div>';$('#status').textContent=t('error')+': '+e.message;}\n  }finally{b.disabled=false;if(stopBtn)stopBtn.style.display='none';radarAbortController=null}\n}\n\n$('#discover').addEventListener('click',discover);\n$('#stopScan').addEventListener('click',()=>{if(radarAbortController)radarAbortController.abort();});"
-          if old4 not in s: raise SystemExit('discover tail mismatch')
-          s=s.replace(old4,new4,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.32 Cloud';","const VERSION = 'RADAR v0.4.7.33 Cloud';",1)
-          if '<div class="version">v0.4.7.32</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.32</div>','<div class="version">v0.4.7.33</div>',1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.33 Cloud';","const VERSION = 'RADAR v0.4.7.34 Cloud';",1)
+          if '<div class="version">v0.4.7.33</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.33</div>','<div class="version">v0.4.7.34</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -56,7 +50,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.33 Cloud","id=\"stopScan\"","new AbortController()","signal:radarAbortController.signal","name==='AbortError'","Inserisci il genere musicale prima di avviare RADAR.","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.34 Cloud","id=\"stopScan\" type=\"button\" disabled","stopBtn.disabled=false","stopBtn.disabled=true","new AbortController()","signal:radarAbortController.signal","name==='AbortError'","Inserisci il genere musicale prima di avviare RADAR.","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
           if '/api/contact-memory' in s: raise SystemExit('contact memory must not be in this version')
@@ -67,5 +61,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.33 stop search only" || exit 0
+          git commit -m "RADAR v0.4.7.34 visible stop control fix" || exit 0
           git push
