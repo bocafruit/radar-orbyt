@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.25 Cloud';
+const VERSION = 'RADAR v0.4.7.26 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,11 +73,12 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.25</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.26</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="melodic techno" placeholder="es. melodic techno" /></div>
-<div class="field"><label data-i18n="artistsLabel">Artisti simili</label><input id="artists" placeholder="es. Anyma, Massano" /></div>
+<div class="field"><label>Brano da promuovere</label><input id="trackUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /><div id="trackPreview" style="display:none;margin-top:10px;align-items:center;gap:10px"></div></div>
+<div class="field"><label data-i18n="artistsLabel">Artisti simili · opzionale</label><input id="artists" placeholder="es. Anyma, Argy, Massano" /></div>
 <div class="field"><label data-i18n="modeLabel">Modalità</label><select id="mode"><option value="quick" data-i18n="quick">Ricerca Rapida</option><option value="complete" data-i18n="complete">Analisi Completa</option></select></div>
 <div class="field"><label data-i18n="strategyLabel">Strategia</label><select id="strategy"><option value="balanced" data-i18n="balanced">Bilanciata</option><option value="audience" data-i18n="audience">Audience reale</option><option value="coverage" data-i18n="coverage">Massima copertura</option><option value="new" data-i18n="newCurators">Nuovi curatori</option></select></div>
 <div class="field"><label data-i18n="objectiveLabel">Obiettivo</label><select id="objective"><option value="contact" selected>Contact-First</option><option value="playlist">Playlist Discovery</option></select></div>
@@ -344,6 +345,15 @@ function scanUpdate(pct,title,msg,stats={}){pct=Math.max(4,Math.min(100,Math.rou
 function scanFinish(title,msg,stats={}){scanUpdate(100,title,msg,stats);clearInterval(scanClock);scanClock=null;setTimeout(()=>$('#scanPanel').classList.remove('active'),1800);}
 function scanError(msg){clearInterval(scanClock);scanClock=null;scanUpdate(100,t('scanInterrupted'),msg);$('#scanEngine').textContent=t('checkEngines');}
 
+let promotedTrack=null;
+async function resolvePromotedTrack(){
+ const el=$('#trackUrl'),box=$('#trackPreview');if(!el||!box)return;
+ const raw=el.value.trim();let u;try{u=new URL(raw)}catch(e){promotedTrack=null;box.style.display='none';return;}
+ const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1]){promotedTrack=null;box.style.display='none';return;}
+ const clean='https://open.spotify.com/track/'+parts[1];box.style.display='flex';box.textContent='Riconosco il brano Spotify…';
+ try{const r=await fetch('/api/spotify-track?url='+encodeURIComponent(clean));const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Brano Spotify non trovato');promotedTrack=d;box.innerHTML='';if(d.image){const im=document.createElement('img');im.src=d.image;im.alt='';im.style.cssText='width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 54px';box.appendChild(im)}const tx=document.createElement('div');const t=document.createElement('strong');t.textContent=d.track||'Brano Spotify';const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:13px;opacity:.72;margin-top:3px';tx.append(t,a);box.appendChild(tx)}catch(e){promotedTrack=null;box.textContent=e.message||'Errore Spotify'}
+}
+setTimeout(()=>{const el=$('#trackUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._rt);el._rt=setTimeout(resolvePromotedTrack,180)});el.addEventListener('paste',()=>setTimeout(resolvePromotedTrack,20))}},0);
 async function discover(){
   const b=$('#discover');b.disabled=true;
   const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
@@ -1049,7 +1059,8 @@ async function validateLinks(input){
   return {results};
 }
 
-export default {async fetch(request,env){const url=new URL(request.url);
+export default {async fetch(request,env){const url=new URL(request.url);if(url.pathname==='/api/spotify-track'&&request.method==='GET'){try{const raw=url.searchParams.get('url')||'';const u=new URL(raw);const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1])return json({error:'Link Spotify non valido'},400);const clean='https://open.spotify.com/track/'+parts[1];const r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(clean));if(!r.ok)return json({error:'Brano Spotify non trovato'},400);const d=await r.json();return json({track:String(d.title||'').trim(),artist:'',image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})}catch(e){return json({error:'Link Spotify non valido'},400)}}
+
       if(url.pathname==='/api/db-health' && request.method==='GET')return json(await dbHealth(env));
 
       if(url.pathname==='/api/campaigns' && request.method==='GET'){
