@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.31 Cloud';
+const VERSION = 'RADAR v0.4.7.32 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.31</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.32</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
@@ -355,8 +355,10 @@ async function resolvePromotedTrack(){
 }
 setTimeout(()=>{const el=$('#trackUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._rt);el._rt=setTimeout(resolvePromotedTrack,180)});el.addEventListener('paste',()=>setTimeout(resolvePromotedTrack,20))}},0);
 async function discover(){
+  const genreField=$('#genre');const genreValue=genreField.value.trim();
+  if(!genreValue){genreField.focus();const oldBorder=genreField.style.borderColor;genreField.style.borderColor='#ff5b6e';$('#status').textContent='Inserisci il genere musicale prima di avviare RADAR.';setTimeout(()=>{genreField.style.borderColor=oldBorder},1800);return;}
   const b=$('#discover');b.disabled=true;
-  const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
+  const payload={genre:genreValue,artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
   let googleUsed=0;
   const googleMax=payload.mode==='complete'?6:3;
   try{
