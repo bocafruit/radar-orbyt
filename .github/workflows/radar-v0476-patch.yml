@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.26 Spotify oEmbed track card
+name: RADAR v0.4.7.27 artist title and auto genre
 on:
   push:
     paths:
@@ -10,27 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build isolated Spotify track card
+      - name: Build v0.4.7.27 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.25 Cloud';" not in s: raise SystemExit('version mismatch')
-          old='<div class="field"><label data-i18n="artistsLabel">Artisti simili</label><input id="artists" placeholder="es. Anyma, Massano" /></div>'
-          new='\n'.join(['<div class="field"><label>Brano da promuovere</label><input id="trackUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /><div id="trackPreview" style="display:none;margin-top:10px;align-items:center;gap:10px"></div></div>','<div class="field"><label data-i18n="artistsLabel">Artisti simili · opzionale</label><input id="artists" placeholder="es. Anyma, Argy, Massano" /></div>'])
-          if old not in s: raise SystemExit('field mismatch')
+          if "const VERSION = 'RADAR v0.4.7.26 Cloud';" not in s: raise SystemExit('version mismatch')
+          old="const d=await r.json();return json({track:String(d.title||'').trim(),artist:'',image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})"
+          new="const token=await spotifyAccessToken(env);if(!token)return json({error:'Spotify non disponibile'},503);const tr=await fetch('https://api.spotify.com/v1/tracks/'+encodeURIComponent(parts[1]),{headers:{Authorization:'Bearer '+token}});if(!tr.ok)return json({error:'Brano Spotify non trovato'},400);const td=await tr.json();const names=(td.artists||[]).map(a=>a.name).filter(Boolean);let genres=[];const aid=td.artists&&td.artists[0]&&td.artists[0].id;if(aid){try{const ar=await fetch('https://api.spotify.com/v1/artists/'+encodeURIComponent(aid),{headers:{Authorization:'Bearer '+token}});if(ar.ok){const ad=await ar.json();genres=(ad.genres||[]).filter(Boolean).slice(0,4)}}catch(e){}}return json({track:String(td.name||'').trim(),artist:names.join(', '),image:String((td.album&&td.album.images&&td.album.images[0]&&td.album.images[0].url)||d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1],genres})"
+          if old not in s: raise SystemExit('spotify response anchor mismatch')
           s=s.replace(old,new,1)
-          anchor='async function discover(){'
-          if anchor not in s: raise SystemExit('discover anchor mismatch')
-          js='\n'.join(["let promotedTrack=null;","async function resolvePromotedTrack(){"," const el=$('#trackUrl'),box=$('#trackPreview');if(!el||!box)return;"," const raw=el.value.trim();let u;try{u=new URL(raw)}catch(e){promotedTrack=null;box.style.display='none';return;}"," const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1]){promotedTrack=null;box.style.display='none';return;}"," const clean='https://open.spotify.com/track/'+parts[1];box.style.display='flex';box.textContent='Riconosco il brano Spotify…';"," try{const r=await fetch('/api/spotify-track?url='+encodeURIComponent(clean));const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Brano Spotify non trovato');promotedTrack=d;box.innerHTML='';if(d.image){const im=document.createElement('img');im.src=d.image;im.alt='';im.style.cssText='width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 54px';box.appendChild(im)}const tx=document.createElement('div');const t=document.createElement('strong');t.textContent=d.track||'Brano Spotify';const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:13px;opacity:.72;margin-top:3px';tx.append(t,a);box.appendChild(tx)}catch(e){promotedTrack=null;box.textContent=e.message||'Errore Spotify'}","}","setTimeout(()=>{const el=$('#trackUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._rt);el._rt=setTimeout(resolvePromotedTrack,180)});el.addEventListener('paste',()=>setTimeout(resolvePromotedTrack,20))}},0);",""])
-          s=s.replace(anchor,js+anchor,1)
-          fetch_anchor="export default {async fetch(request,env){const url=new URL(request.url);"
-          if fetch_anchor not in s: raise SystemExit('fetch anchor mismatch')
-          route="if(url.pathname==='/api/spotify-track'&&request.method==='GET'){try{const raw=url.searchParams.get('url')||'';const u=new URL(raw);const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1])return json({error:'Link Spotify non valido'},400);const clean='https://open.spotify.com/track/'+parts[1];const r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(clean));if(!r.ok)return json({error:'Brano Spotify non trovato'},400);const d=await r.json();return json({track:String(d.title||'').trim(),artist:'',image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})}catch(e){return json({error:'Link Spotify non valido'},400)}}\n"
-          s=s.replace(fetch_anchor,fetch_anchor+route,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.25 Cloud';","const VERSION = 'RADAR v0.4.7.26 Cloud';",1)
-          if '<div class="version">v0.4.7.25</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.25</div>','<div class="version">v0.4.7.26</div>',1)
+          oldcard="const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:13px;opacity:.72;margin-top:3px';tx.append(t,a);box.appendChild(tx)"
+          newcard="const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:12px;font-weight:800;letter-spacing:.04em;opacity:.82;margin-bottom:3px';tx.append(a,t);box.appendChild(tx);const g=$('#genre');if(g&&d.genres&&d.genres.length){const detected=d.genres[0];if(!g.value.trim())g.value=detected;let note=$('#genreDetected');if(!note){note=document.createElement('div');note.id='genreDetected';note.style.cssText='font-size:11px;color:var(--green);margin-top:6px';g.parentNode.appendChild(note)}note.textContent='Rilevato automaticamente: '+d.genres.join(' · ')}"
+          if oldcard not in s: raise SystemExit('track card anchor mismatch')
+          s=s.replace(oldcard,newcard,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.26 Cloud';","const VERSION = 'RADAR v0.4.7.27 Cloud';",1)
+          if '<div class="version">v0.4.7.26</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.26</div>','<div class="version">v0.4.7.27</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -50,7 +47,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.26 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","new URL(raw)","open.spotify.com/oembed","/api/spotify-track","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.27 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","api.spotify.com/v1/tracks/","api.spotify.com/v1/artists/","Rilevato automaticamente:","tx.append(a,t)","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
           print('PASS')
@@ -60,5 +57,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.26 Spotify oEmbed track card" || exit 0
+          git commit -m "RADAR v0.4.7.27 artist title and auto genre" || exit 0
           git push
