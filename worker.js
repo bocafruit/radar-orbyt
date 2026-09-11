@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.33 Cloud';
+const VERSION = 'RADAR v0.4.7.34 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.33</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.34</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
@@ -83,7 +83,7 @@ const HTML = `<!doctype html>
 <div class="field"><label data-i18n="strategyLabel">Strategia</label><select id="strategy"><option value="balanced" data-i18n="balanced">Bilanciata</option><option value="audience" data-i18n="audience">Audience reale</option><option value="coverage" data-i18n="coverage">Massima copertura</option><option value="new" data-i18n="newCurators">Nuovi curatori</option></select></div>
 <div class="field"><label data-i18n="objectiveLabel">Obiettivo</label><select id="objective"><option value="contact" selected>Contact-First</option><option value="playlist">Playlist Discovery</option></select></div>
 </div>
-<div class="actions"><button class="btn" id="discover" data-i18n="scan">Scansiona playlist</button><button class="btn secondary" id="stopScan" style="display:none" type="button">Stop ricerca</button><button class="btn secondary" id="health" data-i18n="health">Test sistema</button><span class="status" id="status" data-i18n="ready">Pronto.</span></div>
+<div class="actions"><button class="btn" id="discover" data-i18n="scan">Scansiona playlist</button><button class="btn secondary" id="stopScan" type="button" disabled>Stop ricerca</button><button class="btn secondary" id="health" data-i18n="health">Test sistema</button><span class="status" id="status" data-i18n="ready">Pronto.</span></div>
 </section>
 <section class="scanPanel" id="scanPanel"><div class="scanLayout"><div class="scanRadar"><div class="scanSweep"></div><i class="scanDot d1"></i><i class="scanDot d2"></i><i class="scanDot d3"></i></div><div><div class="scanEyebrow"><span class="scanPulse"></span>Scansione in corso</div><div class="scanTitle" id="scanTitle">Inizializzazione RADAR…</div><div class="scanMessage" id="scanMessage">Preparo i motori di ricerca e i criteri di contatto.</div><div class="progressRow"><div class="progressTrack"><div class="progressFill" id="scanProgress"></div></div><div class="progressPct" id="scanPct">4%</div></div><div class="scanStats"><div class="scanStat"><b id="statCandidates">0</b><span>Candidate</span></div><div class="scanStat"><b id="statChecked">0</b><span>Analizzate</span></div><div class="scanStat"><b id="statContacts">0</b><span>Contatti</span></div><div class="scanStat"><b id="statGoogle">0</b><span>Google fallback</span></div></div><div class="scanFooter"><span id="scanEngine">Brave → Google fallback → RADAR</span><span id="scanTimer">Tempo 0s</span></div></div></div></section>
 <div class="resultsHead"><div><h2 id="resultsTitle" data-i18n="resultsTitle">Playlist contattabili</h2><span class="count" id="count">0 risultati</span></div><div class="resultsTools"><select id="sortResults" class="sortSelect"><option value="contact-desc" data-i18n="sortContactDesc">Contattabilità ↓</option><option value="contact-asc" data-i18n="sortContactAsc">Contattabilità ↑</option><option value="match-desc" data-i18n="sortMatchDesc">Match ↓</option><option value="match-asc" data-i18n="sortMatchAsc">Match ↑</option><option value="confidence-desc" data-i18n="sortConfDesc">Confidenza ↓</option><option value="confidence-asc" data-i18n="sortConfAsc">Confidenza ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select><button class="filterChip" data-filter="email">Email</button><button class="filterChip" data-filter="instagram">Instagram</button><button class="filterChip" data-filter="submission">Submission</button></div></div>
@@ -358,7 +358,7 @@ let radarAbortController=null;
 async function discover(){
   const genreField=$('#genre');const genreValue=genreField.value.trim();
   if(!genreValue){genreField.focus();const oldBorder=genreField.style.borderColor;genreField.style.borderColor='#ff5b6e';$('#status').textContent='Inserisci il genere musicale prima di avviare RADAR.';setTimeout(()=>{genreField.style.borderColor=oldBorder},1800);return;}
-  const b=$('#discover');b.disabled=true;const stopBtn=$('#stopScan');if(stopBtn)stopBtn.style.display='inline-flex';radarAbortController=new AbortController();
+  const b=$('#discover');b.disabled=true;const stopBtn=$('#stopScan');if(stopBtn)stopBtn.disabled=false;radarAbortController=new AbortController();
   const payload={genre:genreValue,artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
   let googleUsed=0;
   const googleMax=payload.mode==='complete'?6:3;
@@ -414,7 +414,7 @@ async function discover(){
     $('#status').textContent=useful.length+' '+t('contactable')+' · Motori: '+engineText+(failText?' · Failover '+failText:'')+' · Google '+googleUsed+'/'+googleMax;
   }catch(e){
     if(e&&e.name==='AbortError'){clearInterval(scanClock);scanClock=null;$('#scanPanel').classList.remove('active');$('#status').textContent='Ricerca interrotta.';}else{scanError(e.message);$('#results').innerHTML='<div class="empty error">'+esc(e.message)+'</div>';$('#status').textContent=t('error')+': '+e.message;}
-  }finally{b.disabled=false;if(stopBtn)stopBtn.style.display='none';radarAbortController=null}
+  }finally{b.disabled=false;if(stopBtn)stopBtn.disabled=true;radarAbortController=null}
 }
 
 $('#discover').addEventListener('click',discover);
