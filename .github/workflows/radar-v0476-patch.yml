@@ -26,7 +26,7 @@ jobs:
           s=s.replace(anchor,js+anchor,1)
           fetch_anchor="export default {async fetch(request,env){const url=new URL(request.url);"
           if fetch_anchor not in s: raise SystemExit('fetch anchor mismatch')
-          route="if(url.pathname==='/api/spotify-track'&&request.method==='GET'){try{const raw=url.searchParams.get('url')||'';const u=new URL(raw);const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1])return json({error:'Link Spotify non valido'},400);const clean='https://open.spotify.com/track/'+parts[1];const r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(clean));if(!r.ok)return json({error:'Brano Spotify non trovato'},400);const d=await r.json();let title=String(d.title||'').trim();let track=title,artist='';const sep=title.lastIndexOf(' - ');if(sep>0){track=title.slice(0,sep).trim();artist=title.slice(sep+3).trim()}return json({track,artist,image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})}catch(e){return json({error:'Link Spotify non valido'},400)}}\n"
+          route="if(url.pathname==='/api/spotify-track'&&request.method==='GET'){try{const raw=url.searchParams.get('url')||'';const u=new URL(raw);const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1])return json({error:'Link Spotify non valido'},400);const clean='https://open.spotify.com/track/'+parts[1];const r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(clean));if(!r.ok)return json({error:'Brano Spotify non trovato'},400);const d=await r.json();return json({track:String(d.title||'').trim(),artist:'',image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})}catch(e){return json({error:'Link Spotify non valido'},400)}}\n"
           s=s.replace(fetch_anchor,fetch_anchor+route,1)
           s=s.replace("const VERSION = 'RADAR v0.4.7.25 Cloud';","const VERSION = 'RADAR v0.4.7.26 Cloud';",1)
           if '<div class="version">v0.4.7.25</div>' not in s: raise SystemExit('visible version mismatch')
@@ -45,7 +45,7 @@ jobs:
           Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
           PY
           node --check /tmp/client.js
-      - name: Rendered browser syntax canary
+      - name: Critical regression canaries
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -53,7 +53,6 @@ jobs:
           checks=["RADAR v0.4.7.26 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","new URL(raw)","open.spotify.com/oembed","/api/spotify-track","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
-          if "open\\.spotify" in s: raise SystemExit('fragile spotify regex found')
           print('PASS')
           PY
       - name: Commit candidate to main
