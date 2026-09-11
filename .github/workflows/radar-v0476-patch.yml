@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.31 manual genre cleanup
+name: RADAR v0.4.7.32 genre required only
 on:
   push:
     paths:
@@ -10,25 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build v0.4.7.31 candidate
+      - name: Build v0.4.7.32 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.30 Cloud';" not in s: raise SystemExit('version mismatch')
-          start="const g=$('#genre');let note=$('#genreDetected');if(note)note.remove();if(g&&d.genres&&d.genres.length){"
-          i=s.find(start)
-          if i<0: raise SystemExit('auto genre start mismatch')
-          end="g.parentNode.appendChild(note)}"
-          j=s.find(end,i)
-          if j<0: raise SystemExit('auto genre end mismatch')
-          s=s[:i]+s[j+len(end):]
-          listener="const gg=$('#genre');if(gg)gg.addEventListener('input',()=>{gg.dataset.userEdited='1'});"
-          if listener not in s: raise SystemExit('genre listener mismatch')
-          s=s.replace(listener,'',1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.30 Cloud';","const VERSION = 'RADAR v0.4.7.31 Cloud';",1)
-          if '<div class="version">v0.4.7.30</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.30</div>','<div class="version">v0.4.7.31</div>',1)
+          if "const VERSION = 'RADAR v0.4.7.31 Cloud';" not in s: raise SystemExit('version mismatch')
+          old="async function discover(){\n  const b=$('#discover');b.disabled=true;\n  const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};"
+          new="async function discover(){\n  const genreField=$('#genre');const genreValue=genreField.value.trim();\n  if(!genreValue){genreField.focus();const oldBorder=genreField.style.borderColor;genreField.style.borderColor='#ff5b6e';$('#status').textContent='Inserisci il genere musicale prima di avviare RADAR.';setTimeout(()=>{genreField.style.borderColor=oldBorder},1800);return;}\n  const b=$('#discover');b.disabled=true;\n  const payload={genre:genreValue,artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};"
+          if old not in s: raise SystemExit('discover anchor mismatch')
+          s=s.replace(old,new,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.31 Cloud';","const VERSION = 'RADAR v0.4.7.32 Cloud';",1)
+          if '<div class="version">v0.4.7.31</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.31</div>','<div class="version">v0.4.7.32</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -48,12 +42,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.31 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","id=\"genre\" value=\"\"",".field:has(#trackUrl){order:-2}","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.32 Cloud","Inserisci il genere musicale prima di avviare RADAR.","const genreValue=genreField.value.trim()","id=\"trackUrl\"","id=\"trackPreview\"","id=\"genre\" value=\"\"","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
-          forbidden=["$('#genreDetected')","g.value=detected","Rilevato automaticamente:","dataset.userEdited"]
+          forbidden=["stopScan","contact_memory","/api/contact-memory"]
           bad=[x for x in forbidden if x in s]
-          if bad: raise SystemExit('auto genre client remnants '+repr(bad))
+          if bad: raise SystemExit('unexpected invasive feature '+repr(bad))
           print('PASS')
           PY
       - name: Commit candidate to main
@@ -61,5 +55,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.31 manual genre cleanup" || exit 0
+          git commit -m "RADAR v0.4.7.32 require genre before search" || exit 0
           git push
