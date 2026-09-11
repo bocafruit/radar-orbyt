@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.30 Cloud';
+const VERSION = 'RADAR v0.4.7.31 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.30</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.31</div></div></section>
 <section class="panel">
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
@@ -351,9 +351,9 @@ async function resolvePromotedTrack(){
  const raw=el.value.trim();let u;try{u=new URL(raw)}catch(e){promotedTrack=null;box.style.display='none';return;}
  const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1]){promotedTrack=null;box.style.display='none';return;}
  const clean='https://open.spotify.com/track/'+parts[1];box.style.display='flex';box.textContent='Riconosco il brano Spotify…';
- try{const r=await fetch('/api/spotify-track?url='+encodeURIComponent(clean));const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Brano Spotify non trovato');promotedTrack=d;box.innerHTML='';if(d.image){const im=document.createElement('img');im.src=d.image;im.alt='';im.style.cssText='width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 54px';box.appendChild(im)}const tx=document.createElement('div');const t=document.createElement('strong');t.textContent=d.track||'Brano Spotify';const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:12px;font-weight:800;letter-spacing:.04em;opacity:.82;margin-bottom:3px';tx.append(a,t);box.appendChild(tx);const g=$('#genre');let note=$('#genreDetected');if(note)note.remove();if(g&&d.genres&&d.genres.length){const detected=d.genres[0];if(!g.dataset.userEdited)g.value=detected;note=document.createElement('div');note.id='genreDetected';note.style.cssText='font-size:11px;color:var(--green);margin-top:6px';note.textContent='Rilevato automaticamente: '+d.genres.join(' · ')+(d.genreConfidence?' · Confidenza '+d.genreConfidence:'');g.parentNode.appendChild(note)}}catch(e){promotedTrack=null;box.textContent=e.message||'Errore Spotify'}
+ try{const r=await fetch('/api/spotify-track?url='+encodeURIComponent(clean));const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Brano Spotify non trovato');promotedTrack=d;box.innerHTML='';if(d.image){const im=document.createElement('img');im.src=d.image;im.alt='';im.style.cssText='width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 54px';box.appendChild(im)}const tx=document.createElement('div');const t=document.createElement('strong');t.textContent=d.track||'Brano Spotify';const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:12px;font-weight:800;letter-spacing:.04em;opacity:.82;margin-bottom:3px';tx.append(a,t);box.appendChild(tx);}catch(e){promotedTrack=null;box.textContent=e.message||'Errore Spotify'}
 }
-setTimeout(()=>{const gg=$('#genre');if(gg)gg.addEventListener('input',()=>{gg.dataset.userEdited='1'});const el=$('#trackUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._rt);el._rt=setTimeout(resolvePromotedTrack,180)});el.addEventListener('paste',()=>setTimeout(resolvePromotedTrack,20))}},0);
+setTimeout(()=>{const el=$('#trackUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._rt);el._rt=setTimeout(resolvePromotedTrack,180)});el.addEventListener('paste',()=>setTimeout(resolvePromotedTrack,20))}},0);
 async function discover(){
   const b=$('#discover');b.disabled=true;
   const payload={genre:$('#genre').value.trim(),artists:$('#artists').value.trim(),mode:$('#mode').value,strategy:$('#strategy').value,objective:$('#objective').value};
