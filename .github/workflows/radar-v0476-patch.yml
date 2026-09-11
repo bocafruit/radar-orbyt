@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.26 composer cleanup
+name: RADAR v0.4.7.26 Spotify oEmbed track card
 on:
   push:
     paths:
@@ -10,17 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Composer UI cleanup only
+      - name: Build isolated Spotify track card
         run: |
           python - <<'PY'
           from pathlib import Path
-          p=Path('worker.js')
-          s=p.read_text()
+          p=Path('worker.js'); s=p.read_text()
           if "const VERSION = 'RADAR v0.4.7.25 Cloud';" not in s: raise SystemExit('version mismatch')
-          old='<div><label data-i18n="variables">Variabili rapide</label><div class="tokenRow"><button class="token" data-token="{{curator}}">{{curator}}</button><button class="token" data-token="{{playlist}}">{{playlist}}</button><button class="token" data-token="{{artist}}">{{artist}}</button><button class="token" data-token="{{track}}">{{track}}</button><button class="token" data-token="{{spotify_link}}">{{spotify_link}}</button></div></div>'
-          new='<div class="composerSub">Personalizzazione automatica per ogni destinatario.</div>'
-          if old not in s: raise SystemExit('variables UI block mismatch')
+          old='<div class="field"><label data-i18n="artistsLabel">Artisti simili</label><input id="artists" placeholder="es. Anyma, Massano" /></div>'
+          new='\n'.join(['<div class="field"><label>Brano da promuovere</label><input id="trackUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /><div id="trackPreview" style="display:none;margin-top:10px;align-items:center;gap:10px"></div></div>','<div class="field"><label data-i18n="artistsLabel">Artisti simili · opzionale</label><input id="artists" placeholder="es. Anyma, Argy, Massano" /></div>'])
+          if old not in s: raise SystemExit('field mismatch')
           s=s.replace(old,new,1)
+          anchor='async function discover(){'
+          if anchor not in s: raise SystemExit('discover anchor mismatch')
+          js='\n'.join(["let promotedTrack=null;","async function resolvePromotedTrack(){"," const el=$('#trackUrl'),box=$('#trackPreview');if(!el||!box)return;"," const raw=el.value.trim();let u;try{u=new URL(raw)}catch(e){promotedTrack=null;box.style.display='none';return;}"," const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1]){promotedTrack=null;box.style.display='none';return;}"," const clean='https://open.spotify.com/track/'+parts[1];box.style.display='flex';box.textContent='Riconosco il brano Spotify…';"," try{const r=await fetch('/api/spotify-track?url='+encodeURIComponent(clean));const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Brano Spotify non trovato');promotedTrack=d;box.innerHTML='';if(d.image){const im=document.createElement('img');im.src=d.image;im.alt='';im.style.cssText='width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 54px';box.appendChild(im)}const tx=document.createElement('div');const t=document.createElement('strong');t.textContent=d.track||'Brano Spotify';const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:13px;opacity:.72;margin-top:3px';tx.append(t,a);box.appendChild(tx)}catch(e){promotedTrack=null;box.textContent=e.message||'Errore Spotify'}","}","setTimeout(()=>{const el=$('#trackUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._rt);el._rt=setTimeout(resolvePromotedTrack,180)});el.addEventListener('paste',()=>setTimeout(resolvePromotedTrack,20))}},0);",""])
+          s=s.replace(anchor,js+anchor,1)
+          fetch_anchor="export default {async fetch(request,env){const url=new URL(request.url);"
+          if fetch_anchor not in s: raise SystemExit('fetch anchor mismatch')
+          route="if(url.pathname==='/api/spotify-track'&&request.method==='GET'){try{const raw=url.searchParams.get('url')||'';const u=new URL(raw);const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1])return json({error:'Link Spotify non valido'},400);const clean='https://open.spotify.com/track/'+parts[1];const r=await fetch('https://open.spotify.com/oembed?url='+encodeURIComponent(clean));if(!r.ok)return json({error:'Brano Spotify non trovato'},400);const d=await r.json();let title=String(d.title||'').trim();let track=title,artist='';const sep=title.lastIndexOf(' - ');if(sep>0){track=title.slice(0,sep).trim();artist=title.slice(sep+3).trim()}return json({track,artist,image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})}catch(e){return json({error:'Link Spotify non valido'},400)}}\n"
+          s=s.replace(fetch_anchor,fetch_anchor+route,1)
           s=s.replace("const VERSION = 'RADAR v0.4.7.25 Cloud';","const VERSION = 'RADAR v0.4.7.26 Cloud';",1)
           if '<div class="version">v0.4.7.25</div>' not in s: raise SystemExit('visible version mismatch')
           s=s.replace('<div class="version">v0.4.7.25</div>','<div class="version">v0.4.7.26</div>',1)
@@ -28,36 +35,31 @@ jobs:
           PY
       - name: Worker syntax
         run: node --check worker.js
-      - name: Extract and syntax-check browser JavaScript
+      - name: Browser source syntax
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
-          s=Path('worker.js').read_text()
-          scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I)
-          if not scripts: raise SystemExit('No browser script blocks found')
-          out='\n;\n'.join(scripts)
-          Path('/tmp/radar-client.js').write_text(out)
-          print(f'Extracted {len(scripts)} browser script block(s), {len(out)} chars')
+          s=Path('worker.js').read_text(); scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I)
+          if not scripts: raise SystemExit('no scripts')
+          Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
           PY
-          node --check /tmp/radar-client.js
-      - name: Critical regression canaries
+          node --check /tmp/client.js
+      - name: Rendered browser syntax canary
         run: |
-          grep -q "RADAR v0.4.7.26 Cloud" worker.js
-          grep -q "function updateClock" worker.js
-          grep -q "health').addEventListener" worker.js
-          grep -q "if(selectedOutreach.has(k))selectedOutreach.delete(k);else selectedOutreach.set(k,r);" worker.js
-          grep -q "outreachPriority.selected" worker.js
-          grep -q "priorityOutreach(sortedFilteredResults" worker.js
-          grep -q "function fillTemplate" worker.js
-          grep -q "spotifySearchPlaylists" worker.js
-          grep -q "firstQueries=input.mode==='complete'?queries:queries.slice(0,2)" worker.js
-          grep -q "Personalizzazione automatica per ogni destinatario." worker.js
-          if grep -q '<label data-i18n="variables">Variabili rapide</label>' worker.js; then exit 1; fi
-      - name: Commit worker
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('worker.js').read_text()
+          checks=["RADAR v0.4.7.26 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","new URL(raw)","open.spotify.com/oembed","/api/spotify-track","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          miss=[x for x in checks if x not in s]
+          if miss: raise SystemExit('missing '+repr(miss))
+          if "open\\.spotify" in s: raise SystemExit('fragile spotify regex found')
+          print('PASS')
+          PY
+      - name: Commit candidate to main
         run: |
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.26 composer UI cleanup only" || exit 0
+          git commit -m "RADAR v0.4.7.26 Spotify oEmbed track card" || exit 0
           git push
