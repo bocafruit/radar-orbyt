@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.27 artist title and auto genre
+name: RADAR v0.4.7.28 genre reset and resilient detection
 on:
   push:
     paths:
@@ -10,24 +10,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build v0.4.7.27 candidate
+      - name: Build v0.4.7.28 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.26 Cloud';" not in s: raise SystemExit('version mismatch')
-          old="const d=await r.json();return json({track:String(d.title||'').trim(),artist:'',image:String(d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1]})"
-          new="const token=await spotifyAccessToken(env);if(!token)return json({error:'Spotify non disponibile'},503);const tr=await fetch('https://api.spotify.com/v1/tracks/'+encodeURIComponent(parts[1]),{headers:{Authorization:'Bearer '+token}});if(!tr.ok)return json({error:'Brano Spotify non trovato'},400);const td=await tr.json();const names=(td.artists||[]).map(a=>a.name).filter(Boolean);let genres=[];const aid=td.artists&&td.artists[0]&&td.artists[0].id;if(aid){try{const ar=await fetch('https://api.spotify.com/v1/artists/'+encodeURIComponent(aid),{headers:{Authorization:'Bearer '+token}});if(ar.ok){const ad=await ar.json();genres=(ad.genres||[]).filter(Boolean).slice(0,4)}}catch(e){}}return json({track:String(td.name||'').trim(),artist:names.join(', '),image:String((td.album&&td.album.images&&td.album.images[0]&&td.album.images[0].url)||d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1],genres})"
-          if old not in s: raise SystemExit('spotify response anchor mismatch')
+          if "const VERSION = 'RADAR v0.4.7.27 Cloud';" not in s: raise SystemExit('version mismatch')
+          # Start genre empty instead of preloading Melodic Techno.
+          s=s.replace('id="genre" value="Melodic Techno"','id="genre" value=""',1)
+          # If markup used a bare value, cover that exact variant too.
+          s=s.replace('id="genre" value=\'Melodic Techno\'','id="genre" value=""',1)
+          # Add a safe web-evidence fallback when Spotify artist genres are empty/deprecated.
+          old="return json({track:String(td.name||'').trim(),artist:names.join(', '),image:String((td.album&&td.album.images&&td.album.images[0]&&td.album.images[0].url)||d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1],genres})"
+          new="if(!genres.length&&names.length){try{const qs=[names[0]+' '+String(td.name||'')+' genre',names[0]+' music genre'];for(const q of qs){const rr=await braveSearch(q,env,4);const text=(rr||[]).map(x=>String((x.title||'')+' '+(x.description||'')+' '+(x.snippet||''))).join(' ').toLowerCase();const catalog=['melodic techno','melodic house','progressive house','tech house','deep house','afro house','house','techno','trance','electronic','dance pop','pop','hip hop','rap','indie'];for(const g of catalog){if(text.includes(g)&&!genres.includes(g))genres.push(g)}if(genres.length)break}}catch(e){}}return json({track:String(td.name||'').trim(),artist:names.join(', '),image:String((td.album&&td.album.images&&td.album.images[0]&&td.album.images[0].url)||d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1],genres:genres.slice(0,4)})"
+          if old not in s: raise SystemExit('genre response anchor mismatch')
           s=s.replace(old,new,1)
-          oldcard="const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:13px;opacity:.72;margin-top:3px';tx.append(t,a);box.appendChild(tx)"
-          newcard="const a=document.createElement('div');a.textContent=d.artist||'';a.style.cssText='font-size:12px;font-weight:800;letter-spacing:.04em;opacity:.82;margin-bottom:3px';tx.append(a,t);box.appendChild(tx);const g=$('#genre');if(g&&d.genres&&d.genres.length){const detected=d.genres[0];if(!g.value.trim())g.value=detected;let note=$('#genreDetected');if(!note){note=document.createElement('div');note.id='genreDetected';note.style.cssText='font-size:11px;color:var(--green);margin-top:6px';g.parentNode.appendChild(note)}note.textContent='Rilevato automaticamente: '+d.genres.join(' · ')}"
-          if oldcard not in s: raise SystemExit('track card anchor mismatch')
-          s=s.replace(oldcard,newcard,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.26 Cloud';","const VERSION = 'RADAR v0.4.7.27 Cloud';",1)
-          if '<div class="version">v0.4.7.26</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.26</div>','<div class="version">v0.4.7.27</div>',1)
+          # Always clear old auto-detection note when a new track resolves without evidence.
+          oldclient="const g=$('#genre');if(g&&d.genres&&d.genres.length){const detected=d.genres[0];if(!g.value.trim())g.value=detected;let note=$('#genreDetected');if(!note){note=document.createElement('div');note.id='genreDetected';note.style.cssText='font-size:11px;color:var(--green);margin-top:6px';g.parentNode.appendChild(note)}note.textContent='Rilevato automaticamente: '+d.genres.join(' · ')}"
+          newclient="const g=$('#genre');let note=$('#genreDetected');if(note)note.remove();if(g&&d.genres&&d.genres.length){const detected=d.genres[0];if(!g.dataset.userEdited)g.value=detected;note=document.createElement('div');note.id='genreDetected';note.style.cssText='font-size:11px;color:var(--green);margin-top:6px';note.textContent='Rilevato automaticamente: '+d.genres.join(' · ');g.parentNode.appendChild(note)}"
+          if oldclient not in s: raise SystemExit('genre client anchor mismatch')
+          s=s.replace(oldclient,newclient,1)
+          # Preserve a manual genre choice after user edits it.
+          marker="setTimeout(()=>{const el=$('#trackUrl');if(el){el.addEventListener('input'"
+          if marker not in s: raise SystemExit('listener marker mismatch')
+          s=s.replace(marker,"setTimeout(()=>{const gg=$('#genre');if(gg)gg.addEventListener('input',()=>{gg.dataset.userEdited='1'});const el=$('#trackUrl');if(el){el.addEventListener('input'",1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.27 Cloud';","const VERSION = 'RADAR v0.4.7.28 Cloud';",1)
+          if '<div class="version">v0.4.7.27</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.27</div>','<div class="version">v0.4.7.28</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -47,9 +56,10 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.27 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","api.spotify.com/v1/tracks/","api.spotify.com/v1/artists/","Rilevato automaticamente:","tx.append(a,t)","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.28 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","Rilevato automaticamente:","melodic techno","dataset.userEdited","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
+          if 'id="genre" value="Melodic Techno"' in s: raise SystemExit('default genre still present')
           print('PASS')
           PY
       - name: Commit candidate to main
@@ -57,5 +67,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.27 artist title and auto genre" || exit 0
+          git commit -m "RADAR v0.4.7.28 genre reset and resilient detection" || exit 0
           git push
