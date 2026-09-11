@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.29 root genre fix
+name: RADAR v0.4.7.30 genre specificity and track-first UI
 on:
   push:
     paths:
@@ -10,27 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build v0.4.7.29 candidate
+      - name: Build v0.4.7.30 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.28 Cloud';" not in s: raise SystemExit('version mismatch')
-          old='<input id="genre" value="melodic techno" placeholder="es. melodic techno" />'
-          new='<input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" />'
-          if old not in s: raise SystemExit('real genre default not found')
+          if "const VERSION = 'RADAR v0.4.7.29 Cloud';" not in s: raise SystemExit('version mismatch')
+          old="for(const g of catalog){let pos=0,start=0;while((pos=text.indexOf(g,start))>=0){scores.set(g,(scores.get(g)||0)+1);start=pos+g.length}}"
+          new="const specificHits=catalog.filter(g=>g.includes(' ')&&text.includes(g));for(const g of catalog){if((g==='house'||g==='techno')&&specificHits.some(x=>x.endsWith(g)))continue;let pos=0,start=0;const weight=g.includes(' ')?3:1;while((pos=text.indexOf(g,start))>=0){scores.set(g,(scores.get(g)||0)+weight);start=pos+g.length}}"
+          if old not in s: raise SystemExit('genre scoring anchor mismatch')
           s=s.replace(old,new,1)
-          oldroute="if(!genres.length&&names.length){try{const qs=[names[0]+' '+String(td.name||'')+' genre',names[0]+' music genre'];for(const q of qs){const rr=await braveSearch(q,env,4);const text=(rr||[]).map(x=>String((x.title||'')+' '+(x.description||'')+' '+(x.snippet||''))).join(' ').toLowerCase();const catalog=['melodic techno','melodic house','progressive house','tech house','deep house','afro house','house','techno','trance','electronic','dance pop','pop','hip hop','rap','indie'];for(const g of catalog){if(text.includes(g)&&!genres.includes(g))genres.push(g)}if(genres.length)break}}catch(e){}}return json({track:String(td.name||'').trim(),artist:names.join(', '),image:String((td.album&&td.album.images&&td.album.images[0]&&td.album.images[0].url)||d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1],genres:genres.slice(0,4)})"
-          newroute="let genreSource=genres.length?'Spotify':'',genreConfidence=genres.length?'MEDIA':'';if(!genres.length&&names.length){try{const qs=[names[0]+' '+String(td.name||'')+' music genre style',names[0]+' '+String(td.name||'')+' melodic techno melodic house progressive house techno house',names[0]+' music genre'];const catalog=['melodic techno','melodic house','progressive house','tech house','deep house','afro house','organic house','minimal techno','hard techno','techno','trance','house','electronic','dance pop','pop','hip hop','rap','indie'];const scores=new Map();for(const q of qs){const sr=await smartSearch(q,env,8);for(const row of sr.results||[]){const text=String((row.title||'')+' '+(row.description||'')).toLowerCase();for(const g of catalog){let pos=0,start=0;while((pos=text.indexOf(g,start))>=0){scores.set(g,(scores.get(g)||0)+1);start=pos+g.length}}}}const ranked=[...scores.entries()].sort((a,b)=>b[1]-a[1]||b[0].length-a[0].length);if(ranked.length){const best=ranked[0][0],bestScore=ranked[0][1];genres=[best];for(const x of ranked.slice(1)){if(x[1]>=Math.max(2,bestScore-1)&&!best.includes(x[0])&&!x[0].includes(best))genres.push(x[0]);if(genres.length>=3)break}genreSource='Web';genreConfidence=bestScore>=4?'ALTA':bestScore>=2?'MEDIA':'BASSA'}}catch(e){}}return json({track:String(td.name||'').trim(),artist:names.join(', '),image:String((td.album&&td.album.images&&td.album.images[0]&&td.album.images[0].url)||d.thumbnail_url||''),spotifyUrl:clean,trackId:parts[1],genres:genres.slice(0,3),genreSource,genreConfidence})"
-          if oldroute not in s: raise SystemExit('genre detector anchor mismatch')
-          s=s.replace(oldroute,newroute,1)
-          oldnote="note.textContent='Rilevato automaticamente: '+d.genres.join(' · ');g.parentNode.appendChild(note)"
-          newnote="note.textContent='Rilevato automaticamente: '+d.genres.join(' · ')+(d.genreConfidence?' · Confidenza '+d.genreConfidence:'');g.parentNode.appendChild(note)"
-          if oldnote not in s: raise SystemExit('genre note anchor mismatch')
-          s=s.replace(oldnote,newnote,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.28 Cloud';","const VERSION = 'RADAR v0.4.7.29 Cloud';",1)
-          if '<div class="version">v0.4.7.28</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.28</div>','<div class="version">v0.4.7.29</div>',1)
+          css=".field:has(#trackUrl){order:-2}.field:has(#genre){order:-1}"
+          anchor='@media(max-width:820px){.grid{grid-template-columns:1fr 1fr}'
+          if anchor not in s: raise SystemExit('css anchor mismatch')
+          s=s.replace(anchor,css+anchor,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.29 Cloud';","const VERSION = 'RADAR v0.4.7.30 Cloud';",1)
+          if '<div class="version">v0.4.7.29</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.29</div>','<div class="version">v0.4.7.30</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -50,7 +46,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.29 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","id=\"genre\" value=\"\"","genreConfidence","smartSearch(q,env,8)","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.30 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","id=\"genre\" value=\"\"","specificHits","g.includes(' ')?3:1",".field:has(#trackUrl){order:-2}","genreConfidence","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
           if 'id="genre" value="melodic techno"' in s.lower(): raise SystemExit('genre default still present')
@@ -61,5 +57,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.29 root genre fix" || exit 0
+          git commit -m "RADAR v0.4.7.30 genre specificity and track-first UI" || exit 0
           git push
