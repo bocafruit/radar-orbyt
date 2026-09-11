@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.31 manual genre only
+name: RADAR v0.4.7.31 manual genre cleanup
 on:
   push:
     paths:
@@ -16,9 +16,16 @@ jobs:
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
           if "const VERSION = 'RADAR v0.4.7.30 Cloud';" not in s: raise SystemExit('version mismatch')
-          old="if(d.genres&&d.genres.length){const g=$('#genre');if(g&&!g.value.trim()){g.value=d.genres[0];g.dataset.autoGenre='1';const old=document.querySelector('.genreAutoNote');if(old)old.remove();const note=document.createElement('div');note.className='genreAutoNote';note.style.cssText='font-size:11px;color:var(--green);margin-top:6px';note.textContent='Rilevato automaticamente: '+d.genres.join(' · ')+(d.genreConfidence?' · Confidenza '+d.genreConfidence:'');g.parentNode.appendChild(note)}}"
-          if old not in s: raise SystemExit('auto genre client anchor mismatch')
-          s=s.replace(old,"",1)
+          start="const g=$('#genre');let note=$('#genreDetected');if(note)note.remove();if(g&&d.genres&&d.genres.length){"
+          i=s.find(start)
+          if i<0: raise SystemExit('auto genre start mismatch')
+          end="g.parentNode.appendChild(note)}"
+          j=s.find(end,i)
+          if j<0: raise SystemExit('auto genre end mismatch')
+          s=s[:i]+s[j+len(end):]
+          listener="const gg=$('#genre');if(gg)gg.addEventListener('input',()=>{gg.dataset.userEdited='1'});"
+          if listener not in s: raise SystemExit('genre listener mismatch')
+          s=s.replace(listener,'',1)
           s=s.replace("const VERSION = 'RADAR v0.4.7.30 Cloud';","const VERSION = 'RADAR v0.4.7.31 Cloud';",1)
           if '<div class="version">v0.4.7.30</div>' not in s: raise SystemExit('visible version mismatch')
           s=s.replace('<div class="version">v0.4.7.30</div>','<div class="version">v0.4.7.31</div>',1)
@@ -44,8 +51,9 @@ jobs:
           checks=["RADAR v0.4.7.31 Cloud","id=\"trackUrl\"","id=\"trackPreview\"","id=\"genre\" value=\"\"",".field:has(#trackUrl){order:-2}","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
-          if "g.dataset.autoGenre='1'" in s: raise SystemExit('auto genre assignment still present')
-          if 'Rilevato automaticamente:' in s: raise SystemExit('auto genre note still present')
+          forbidden=["$('#genreDetected')","g.value=detected","Rilevato automaticamente:","dataset.userEdited"]
+          bad=[x for x in forbidden if x in s]
+          if bad: raise SystemExit('auto genre client remnants '+repr(bad))
           print('PASS')
           PY
       - name: Commit candidate to main
@@ -53,5 +61,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.31 manual genre only" || exit 0
+          git commit -m "RADAR v0.4.7.31 manual genre cleanup" || exit 0
           git push
