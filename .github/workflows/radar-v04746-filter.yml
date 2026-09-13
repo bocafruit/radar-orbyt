@@ -1,0 +1,34 @@
+name: RADAR v0.4.7.46 algorithmic filter
+'on':
+  push:
+    paths:
+      - .github/scripts/patch-v04746-filter.py
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch isolated Track Radar filter
+        run: python3 .github/scripts/patch-v04746-filter.py
+      - name: Syntax and regression canaries
+        run: |
+          node --check worker.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('worker.js').read_text()
+          checks=['RADAR v0.4.7.46 Cloud','function trackRadarAlgorithmic(name)','release radar','discover weekly','daily mix','id="dateClock"','id="trackRadarTab"','id="trackRadarScan"','function updateClock','id="stopScan" type="button" disabled','async function scanTrackRadarPlacements()']
+          missing=[x for x in checks if x not in s]; assert not missing, missing
+          scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I); assert scripts
+          Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
+          PY
+          node --check /tmp/client.js
+      - name: Commit only after tests pass
+        run: |
+          git config user.name bocafruit
+          git config user.email chiesastefanojob@gmail.com
+          git add worker.js
+          git commit -m 'RADAR v0.4.7.46 filter algorithmic placements'
+          git push
