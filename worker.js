@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.35 Cloud';
+const VERSION = 'RADAR v0.4.7.36 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,8 +73,8 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.35</div></div></section>
-<section class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="filterChip" style="cursor:default;border-color:var(--green);color:var(--green)">DISCOVERY RADAR</span><span class="filterChip" style="cursor:default">TRACK RADAR · PROSSIMAMENTE</span></div>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.36</div></div></section>
+<section class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="filterChip" id="discoveryRadarTab" type="button" style="border-color:var(--green);color:var(--green)">DISCOVERY RADAR</button><button class="filterChip" id="trackRadarTab" type="button">TRACK RADAR</button></div><div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Brano da verificare</label><input id="trackRadarUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="trackRadarScan" type="button" disabled>Scansiona placement</button><span class="status">Motore placement non ancora collegato.</span></div></div>
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
 <div class="field"><label>Brano da promuovere</label><input id="trackUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /><div id="trackPreview" style="display:none;margin-top:10px;align-items:center;gap:10px"></div></div>
@@ -101,6 +101,8 @@ Thanks for listening,
 </main>
 <script>
 const $=s=>document.querySelector(s);
+function setRadarView(view){const track=view==='track';const shell=$('#trackRadarShell');const grid=document.querySelector('.panel > .grid');const actions=document.querySelector('.panel > .actions');if(shell)shell.style.display=track?'block':'none';if(grid)grid.style.display=track?'none':'grid';if(actions)actions.style.display=track?'none':'flex';const d=$('#discoveryRadarTab'),t=$('#trackRadarTab');if(d){d.style.borderColor=track?'':'var(--green)';d.style.color=track?'':'var(--green)'}if(t){t.style.borderColor=track?'var(--green)':'';t.style.color=track?'var(--green)':''}}
+document.addEventListener('click',function(e){if(e.target&&e.target.id==='discoveryRadarTab')setRadarView('discovery');if(e.target&&e.target.id==='trackRadarTab')setRadarView('track')});
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 function metric(label,val){return '<div class="metric"><b>'+esc(val)+'</b><span>'+label+'</span></div>'}
 function badgeClass(label){return label==='Strong Match'?'':label==='Worth Checking'?'mid':'weak'}
