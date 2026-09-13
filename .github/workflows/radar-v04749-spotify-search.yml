@@ -1,0 +1,50 @@
+name: RADAR v0.4.7.49 Spotify search fix
+'on':
+  push:
+    branches:
+      - main
+    paths:
+      - .github/scripts/patch-v04749-spotify-search.py
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Spotify search pagination
+        run: python3 .github/scripts/patch-v04749-spotify-search.py
+      - name: Worker syntax
+        run: node --check worker.js
+      - name: Render HTML like browser and syntax-check client
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm');
+          let s=fs.readFileSync('worker.js','utf8');
+          s=s.replace(/export default[\s\S]*$/,'');
+          s+='\n;globalThis.__HTML=HTML;';
+          const sandbox={URL,URLSearchParams,console,fetch:async()=>({ok:false,json:async()=>({})}),setTimeout,clearTimeout,AbortController};
+          vm.createContext(sandbox);vm.runInContext(s,sandbox);
+          const scripts=[...sandbox.__HTML.matchAll(/<script(?:[^>]*)>([\s\S]*?)<\/script>/gi)].map(x=>x[1]);
+          if(!scripts.length)throw new Error('No client script');
+          fs.writeFileSync('/tmp/client.js',scripts.join('\n;\n'));
+          NODE
+          node --check /tmp/client.js
+      - name: Regression canaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('worker.js').read_text()
+          checks=['RADAR v0.4.7.49 Cloud','id="dateClock"','function updateClock','id="trackRadarTab"','id="artistRadarInput"','id="artistRadarScan"','async function artistRadarCatalog(raw,env)',"u.searchParams.set('limit','10')","u.searchParams.set('offset',String(offset))",'/api/artist-radar','id="stopScan" type="button" disabled']
+          missing=[x for x in checks if x not in s]
+          assert not missing,missing
+          assert "u.searchParams.set('limit','50')" not in s
+          print('CANARIES PASS')
+          PY
+      - name: Commit only after tests pass
+        run: |
+          git config user.name bocafruit
+          git config user.email chiesastefanojob@gmail.com
+          git add worker.js
+          git commit -m 'RADAR v0.4.7.49 fix Spotify search pagination'
+          git push origin HEAD:main
