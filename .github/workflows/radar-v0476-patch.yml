@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.44 visible raw diagnostics retry
+name: RADAR v0.4.7.45 Track Radar recall
 'on':
   push:
     paths:
@@ -10,19 +10,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch visible raw diagnostics
+      - name: Patch Track Radar recall
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          assert "const VERSION = 'RADAR v0.4.7.43 Cloud';" in s
-          old="z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ')+' | RAW: '+rs.slice(0,5).map((r,i)=>(i+1)+') '+(r.title||'-')+' → '+(r.url||'-')).join(' | ');box.appendChild(z);return"
-          new="z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ');box.appendChild(z);rs.slice(0,8).forEach((r,i)=>{const row=document.createElement('div');row.className='empty';row.style.marginTop='8px';row.style.padding='12px';row.style.fontSize='12px';row.style.textAlign='left';row.style.wordBreak='break-word';row.textContent='RAW '+(i+1)+' — '+(r.title||'-')+' — '+(r.url||'-');box.appendChild(row)});return"
-          assert old in s; s=s.replace(old,new,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.43 Cloud';","const VERSION = 'RADAR v0.4.7.44 Cloud';",1)
-          assert '<div class="version">v0.4.7.43</div>' in s
-          s=s.replace('<div class="version">v0.4.7.43</div>','<div class="version">v0.4.7.44</div>',1)
+          assert "const VERSION = 'RADAR v0.4.7.44 Cloud';" in s
+          a=s.index('async function trackRadarScan(input,env)')
+          b=s.index('\nasync function ',a+20)
+          block=s[a:b]
+          q0=block.index('const queries=[')
+          q1=block.index('];',q0)+2
+          newq="""const queries=[
+            '\"'+track+'\" \"'+artist+'\" playlist',
+            '\"'+track+'\" \"'+artist+'\" \"playlist by\"',
+            '\"'+track+'\" \"'+artist+'\" Spotify playlist',
+            '\"'+track+'\" '+artist+' open.spotify.com/playlist',
+            'site:open.spotify.com/playlist \"'+track+'\" \"'+artist+'\"',
+            'site:open.spotify.com/playlist \"'+track+'\" '+artist,
+            '\"'+track+'\" '+artist+' playlist Spotify',
+            '\"'+track+'\" \"'+artist+'\" curated playlist',
+            '\"'+track+'\" \"'+artist+'\" tracklist playlist'
+          ];"""
+          block=block[:q0]+newq+block[q1:]
+          block=block.replace('smartSearch(q,env,20)','smartSearch(q,env,30)')
+          block=block.replace('smartSearch(q,env,12)','smartSearch(q,env,30)')
+          s=s[:a]+block+s[b:]
+          s=s.replace("const VERSION = 'RADAR v0.4.7.44 Cloud';","const VERSION = 'RADAR v0.4.7.45 Cloud';",1)
+          assert '<div class="version">v0.4.7.44</div>' in s
+          s=s.replace('<div class="version">v0.4.7.44</div>','<div class="version">v0.4.7.45</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression canaries
@@ -34,7 +51,7 @@ jobs:
           import re
           s=Path('worker.js').read_text(); scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I); assert scripts
           Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
-          checks=['RADAR v0.4.7.44 Cloud',"row.textContent='RAW '",'rawSample','spotifyCandidates','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
+          checks=['RADAR v0.4.7.45 Cloud','tracklist playlist','curated playlist','open.spotify.com/playlist','rawSample','spotifyCandidates','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
           missing=[x for x in checks if x not in s]; assert not missing, missing
           PY
           node --check /tmp/client.js
@@ -44,5 +61,5 @@ jobs:
           git config user.name bocafruit
           git config user.email chiesastefanojob@gmail.com
           git add worker.js
-          git commit -m 'RADAR v0.4.7.44 visible raw diagnostics' || exit 0
+          git commit -m 'RADAR v0.4.7.45 Track Radar recall' || exit 0
           git push
