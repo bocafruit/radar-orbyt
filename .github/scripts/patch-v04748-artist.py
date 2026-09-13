@@ -2,14 +2,11 @@ from pathlib import Path
 p=Path('worker.js'); s=p.read_text()
 assert "const VERSION = 'RADAR v0.4.7.47 Cloud';" in s
 assert 'id="dateClock"' in s and 'id="trackRadarTab"' in s and 'id="trackRadarShell"' in s
-# Rename tab only; keep stable IDs/bootstrap.
 s=s.replace('id="trackRadarTab" type="button">TRACK RADAR</button>','id="trackRadarTab" type="button">ARTIST RADAR</button>',1)
-# Replace only Track Radar shell markup; keep surrounding panel and bootstrap IDs.
 start=s.index('<div id="trackRadarShell"')
 end=s.index('\n<div class="grid">',start)
 new_shell='''<div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Artista da analizzare</label><input id="artistRadarInput" placeholder="es. ORBYT oppure link profilo Spotify" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="artistRadarScan" type="button">Scansiona artista</button><span class="status" id="artistRadarStatus">Cerca dove compaiono le tracce dell’artista.</span></div><div id="artistRadarSummary" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:13px;background:#0a0d1b"></div><div class="status" style="margin-top:9px">RADAR cerca più tracce dello stesso artista, raggruppa i placement per playlist ed esclude le sorgenti Spotify algoritmiche. I risultati dipendono da ciò che è pubblicamente indicizzato sul web.</div><div id="artistRadarResults" style="margin-top:14px"></div><div class="actions" style="display:none"></div></div>'''
 s=s[:start]+new_shell+s[end:]
-# Add isolated frontend code after existing Track Radar listener. No newline-regex literals.
 front="document.addEventListener('click',function(e){if(e.target&&e.target.id==='trackRadarScan')scanTrackRadarPlacements()});"
 assert front in s
 js="""
@@ -17,7 +14,6 @@ async function scanArtistRadar(){const input=document.getElementById('artistRada
 document.addEventListener('click',function(e){if(e.target&&e.target.id==='artistRadarScan')scanArtistRadar()});
 """
 s=s.replace(front,front+js,1)
-# Backend Artist Radar: catalog via Spotify track search, then multi-track reverse discovery.
 backend='function trackRadarAlgorithmic(name)'
 assert backend in s
 helpers="""
@@ -32,3 +28,4 @@ s=s.replace(route,"if(url.pathname==='/api/artist-radar'&&request.method==='POST
 s=s.replace("const VERSION = 'RADAR v0.4.7.47 Cloud';","const VERSION = 'RADAR v0.4.7.48 Cloud';",1)
 s=s.replace('<div class="version">v0.4.7.47</div>','<div class="version">v0.4.7.48</div>',1)
 p.write_text(s)
+# trigger 1
