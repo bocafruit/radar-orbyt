@@ -5,6 +5,7 @@ name: RADAR v0.4.7.48 Artist Radar runtime
       - test-v04748-artist
     paths:
       - .github/scripts/patch-v04748-artist.py
+      - .github/scripts/trigger-v04748.txt
 permissions:
   contents: write
 jobs:
