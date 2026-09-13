@@ -60,16 +60,19 @@ jobs:
           ok=0
           for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
             BODY="$(curl -fsS --max-time 12 "$LIVE_BASE/api/health" || true)"
-            if printf '%s' "$BODY" | grep -F "$EXPECTED" >/dev/null; then ok=1; break; fi
+            HOME="$(curl -fsS --max-time 12 -H 'Cache-Control: no-cache' "$LIVE_BASE/?ci=$(date +%s)" || true)"
+            if printf '%s' "$BODY" | grep -F "$EXPECTED" >/dev/null \
+              && printf '%s' "$HOME" | grep -F 'id="dateClock"' >/dev/null \
+              && printf '%s' "$HOME" | grep -F 'id="artistRadarScan"' >/dev/null \
+              && printf '%s' "$HOME" | grep -F 'async function scanArtistRadar()' >/dev/null; then
+              ok=1
+              break
+            fi
             echo "Waiting for Cloudflare production sync ($i/12)…"
             sleep 10
           done
           if [ "$ok" -ne 1 ]; then
-            echo "Production did not reach $EXPECTED in time"
+            echo "Production live gate failed for $EXPECTED"
             exit 1
           fi
-          HOME="$(curl -fsS --max-time 12 -H 'Cache-Control: no-cache' "$LIVE_BASE/?ci=$(date +%s)")"
-          printf '%s' "$HOME" | grep -F 'id="dateClock"' >/dev/null
-          printf '%s' "$HOME" | grep -F 'id="artistRadarScan"' >/dev/null
-          printf '%s' "$HOME" | grep -F 'CONFERMATO PUBBLICAMENTE' >/dev/null
           echo "LIVE PRODUCTION PASS: $EXPECTED"
