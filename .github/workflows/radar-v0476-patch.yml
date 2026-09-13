@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.45 Track Radar recall
+name: RADAR v0.4.7.45 Track Radar recall retry
 'on':
   push:
     paths:
@@ -18,10 +18,8 @@ jobs:
           p=Path('worker.js'); s=p.read_text()
           assert "const VERSION = 'RADAR v0.4.7.44 Cloud';" in s
           a=s.index('async function trackRadarScan(input,env)')
-          b=s.index('\nasync function ',a+20)
-          block=s[a:b]
-          q0=block.index('const queries=[')
-          q1=block.index('];',q0)+2
+          q0=s.index('const queries=[',a)
+          q1=s.index('];',q0)+2
           newq="""const queries=[
             '\"'+track+'\" \"'+artist+'\" playlist',
             '\"'+track+'\" \"'+artist+'\" \"playlist by\"',
@@ -33,10 +31,7 @@ jobs:
             '\"'+track+'\" \"'+artist+'\" curated playlist',
             '\"'+track+'\" \"'+artist+'\" tracklist playlist'
           ];"""
-          block=block[:q0]+newq+block[q1:]
-          block=block.replace('smartSearch(q,env,20)','smartSearch(q,env,30)')
-          block=block.replace('smartSearch(q,env,12)','smartSearch(q,env,30)')
-          s=s[:a]+block+s[b:]
+          s=s[:q0]+newq+s[q1:]
           s=s.replace("const VERSION = 'RADAR v0.4.7.44 Cloud';","const VERSION = 'RADAR v0.4.7.45 Cloud';",1)
           assert '<div class="version">v0.4.7.44</div>' in s
           s=s.replace('<div class="version">v0.4.7.44</div>','<div class="version">v0.4.7.45</div>',1)
