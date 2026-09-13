@@ -1,0 +1,48 @@
+name: RADAR v0.4.7.47 runtime assisted import
+'on':
+  push:
+    paths:
+      - .github/workflows/radar-v04747-runtime.yml
+      - .github/scripts/patch-v04747-runtime.py
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch candidate
+        run: python3 .github/scripts/patch-v04747-runtime.py
+      - name: Worker syntax
+        run: node --check worker.js
+      - name: Render HTML like browser and syntax-check client
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const src=fs.readFileSync('worker.js','utf8');
+          const m=src.match(/const HTML = `([\s\S]*?)`;\n/);
+          if(!m) throw new Error('HTML template missing');
+          if(m[1].includes('${')) throw new Error('Unexpected template interpolation in HTML');
+          const html=Function('return `'+m[1]+'`;')();
+          const scripts=[...html.matchAll(/<script(?:[^>]*)>([\s\S]*?)<\/script>/gi)].map(x=>x[1]);
+          if(!scripts.length) throw new Error('Rendered client script missing');
+          fs.writeFileSync('/tmp/rendered-client.js',scripts.join('\n;\n'));
+          for(const needle of ['function updateClock','trackRadarTab','trackRadarScan','s4aPlacements','importS4APlacements']) if(!html.includes(needle)) throw new Error('Missing '+needle);
+          NODE
+          node --check /tmp/rendered-client.js
+      - name: Regression canaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('worker.js').read_text()
+          checks=['RADAR v0.4.7.47 Cloud','id="dateClock"','id="discoveryRadarTab"','id="trackRadarTab"','id="trackRadarScan"','id="stopScan" type="button" disabled','function updateClock','function trackRadarAlgorithmic(name)','id="s4aPlacements"','/api/track-radar/import-match']
+          missing=[x for x in checks if x not in s]
+          assert not missing, missing
+          PY
+      - name: Commit candidate to test branch only
+        run: |
+          git config user.name bocafruit
+          git config user.email chiesastefanojob@gmail.com
+          git add worker.js
+          git commit -m 'RADAR v0.4.7.47 runtime-safe assisted import'
+          git push origin HEAD:test-v04747-runtime
