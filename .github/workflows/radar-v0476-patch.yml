@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.43 raw Track Radar diagnostics
+name: RADAR v0.4.7.44 visible raw diagnostics
 'on':
   push:
     paths:
@@ -10,25 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch raw diagnostics
+      - name: Patch visible raw diagnostics
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          assert "const VERSION = 'RADAR v0.4.7.42 Cloud';" in s
-          old="const diagnostics={queries:queries.map((q,i)=>({query:q,provider:batches[i]?.provider||'',count:(batches[i]?.results||[]).length})),rawCount:rawRows.length,spotifyCandidates:[]};"
-          new="const diagnostics={queries:queries.map((q,i)=>({query:q,provider:batches[i]?.provider||'',count:(batches[i]?.results||[]).length})),rawCount:rawRows.length,spotifyCandidates:[],rawSample:rawRows.slice(0,12).map(r=>({title:String(r.title||'').slice(0,100),url:String(r.url||'').slice(0,180),description:String(r.description||'').slice(0,180)}))};"
+          assert "const VERSION = 'RADAR v0.4.7.43 Cloud';" in s
+          old="z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ')+' | RAW: '+rs.slice(0,5).map((r,i)=>(i+1)+') '+(r.title||'-')+' → '+(r.url||'-')).join(' | ');box.appendChild(z);return"
+          new="z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ');box.appendChild(z);const rs=Array.isArray(dg.rawSample)?dg.rawSample:[];rs.slice(0,8).forEach((r,i)=>{const row=document.createElement('div');row.className='empty';row.style.marginTop='8px';row.style.padding='12px';row.style.fontSize='12px';row.style.textAlign='left';row.style.wordBreak='break-word';row.textContent='RAW '+(i+1)+' — '+(r.title||'-')+' — '+(r.url||'-');box.appendChild(row)});return"
           assert old in s; s=s.replace(old,new,1)
-          old2="return{track,artist,placements,diagnostics:{queries:diagnostics.queries,rawCount:diagnostics.rawCount,spotifyCandidates:diagnostics.spotifyCandidates.slice(0,30)},notice:'Risultati basati su evidenze web pubbliche indicizzate; non sono una lista completa di Spotify.'}"
-          new2="return{track,artist,placements,diagnostics:{queries:diagnostics.queries,rawCount:diagnostics.rawCount,spotifyCandidates:diagnostics.spotifyCandidates.slice(0,30),rawSample:diagnostics.rawSample},notice:'Risultati basati su evidenze web pubbliche indicizzate; non sono una lista completa di Spotify.'}"
-          assert old2 in s; s=s.replace(old2,new2,1)
-          old3="z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ');box.appendChild(z);return"
-          new3="const rs=Array.isArray(dg.rawSample)?dg.rawSample:[];z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ')+' | RAW: '+rs.slice(0,5).map((r,i)=>(i+1)+') '+(r.title||'-')+' → '+(r.url||'-')).join(' | ');box.appendChild(z);return"
-          assert old3 in s; s=s.replace(old3,new3,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.42 Cloud';","const VERSION = 'RADAR v0.4.7.43 Cloud';",1)
-          assert '<div class="version">v0.4.7.42</div>' in s
-          s=s.replace('<div class="version">v0.4.7.42</div>','<div class="version">v0.4.7.43</div>',1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.43 Cloud';","const VERSION = 'RADAR v0.4.7.44 Cloud';",1)
+          assert '<div class="version">v0.4.7.43</div>' in s
+          s=s.replace('<div class="version">v0.4.7.43</div>','<div class="version">v0.4.7.44</div>',1)
           p.write_text(s)
           PY
       - name: Syntax and regression canaries
@@ -40,7 +34,7 @@ jobs:
           import re
           s=Path('worker.js').read_text(); scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I); assert scripts
           Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
-          checks=['RADAR v0.4.7.43 Cloud','rawSample','| RAW: ','spotifyCandidates','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
+          checks=['RADAR v0.4.7.44 Cloud',"row.textContent='RAW '",'rawSample','spotifyCandidates','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
           missing=[x for x in checks if x not in s]; assert not missing, missing
           PY
           node --check /tmp/client.js
@@ -50,5 +44,5 @@ jobs:
           git config user.name bocafruit
           git config user.email chiesastefanojob@gmail.com
           git add worker.js
-          git commit -m 'RADAR v0.4.7.43 raw Track Radar diagnostics' || exit 0
+          git commit -m 'RADAR v0.4.7.44 visible raw diagnostics' || exit 0
           git push
