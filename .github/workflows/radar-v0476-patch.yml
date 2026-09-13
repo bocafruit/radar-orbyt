@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.35 safe Track Radar UI shell
+name: RADAR v0.4.7.36 Track Radar mode switch
 on:
   push:
     paths:
@@ -10,19 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build v0.4.7.35 candidate
+      - name: Build v0.4.7.36 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.34 Cloud';" not in s: raise SystemExit('version mismatch')
-          anchor='<section class="panel">\n<div class="grid">'
-          shell='<section class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="filterChip" style="cursor:default;border-color:var(--green);color:var(--green)">DISCOVERY RADAR</span><span class="filterChip" style="cursor:default">TRACK RADAR · PROSSIMAMENTE</span></div>\n<div class="grid">'
-          if anchor not in s: raise SystemExit('panel anchor mismatch')
-          s=s.replace(anchor,shell,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.34 Cloud';","const VERSION = 'RADAR v0.4.7.35 Cloud';",1)
-          if '<div class="version">v0.4.7.34</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.34</div>','<div class="version">v0.4.7.35</div>',1)
+          if "const VERSION = 'RADAR v0.4.7.35 Cloud';" not in s: raise SystemExit('version mismatch')
+          old='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="filterChip" style="cursor:default;border-color:var(--green);color:var(--green)">DISCOVERY RADAR</span><span class="filterChip" style="cursor:default">TRACK RADAR · PROSSIMAMENTE</span></div>'
+          new='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="filterChip" id="discoveryRadarTab" type="button" style="border-color:var(--green);color:var(--green)">DISCOVERY RADAR</button><button class="filterChip" id="trackRadarTab" type="button">TRACK RADAR</button></div><div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Brano da verificare</label><input id="trackRadarUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="trackRadarScan" type="button" disabled>Scansiona placement</button><span class="status">Motore placement non ancora collegato.</span></div></div>'
+          if old not in s: raise SystemExit('track shell anchor mismatch')
+          s=s.replace(old,new,1)
+          script_anchor="const $=s=>document.querySelector(s);"
+          addition="const $=s=>document.querySelector(s);\nfunction setRadarView(view){const track=view==='track';const shell=$('#trackRadarShell');const grid=document.querySelector('.panel > .grid');const actions=document.querySelector('.panel > .actions');if(shell)shell.style.display=track?'block':'none';if(grid)grid.style.display=track?'none':'grid';if(actions)actions.style.display=track?'none':'flex';const d=$('#discoveryRadarTab'),t=$('#trackRadarTab');if(d){d.style.borderColor=track?'':'var(--green)';d.style.color=track?'':'var(--green)'}if(t){t.style.borderColor=track?'var(--green)':'';t.style.color=track?'var(--green)':''}}\ndocument.addEventListener('click',function(e){if(e.target&&e.target.id==='discoveryRadarTab')setRadarView('discovery');if(e.target&&e.target.id==='trackRadarTab')setRadarView('track')});"
+          if script_anchor not in s: raise SystemExit('script anchor mismatch')
+          s=s.replace(script_anchor,addition,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.35 Cloud';","const VERSION = 'RADAR v0.4.7.36 Cloud';",1)
+          if '<div class="version">v0.4.7.35</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.35</div>','<div class="version">v0.4.7.36</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -42,11 +46,9 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re
-          s=Path('worker.js').read_text()
-          scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I)
+          s=Path('worker.js').read_text(); scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I)
           if not scripts: raise SystemExit('no rendered scripts')
-          rendered='\n;\n'.join(x.replace('\\\\','\\') for x in scripts)
-          Path('/tmp/rendered-client.js').write_text(rendered)
+          Path('/tmp/rendered-client.js').write_text('\n;\n'.join(x.replace('\\\\','\\') for x in scripts))
           PY
           node --check /tmp/rendered-client.js
       - name: Critical regression canaries
@@ -54,12 +56,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.35 Cloud","DISCOVERY RADAR","TRACK RADAR · PROSSIMAMENTE","id=\"stopScan\" type=\"button\" disabled","stopBtn.disabled=false","stopBtn.disabled=true","new AbortController()","signal:radarAbortController.signal","name==='AbortError'","Inserisci il genere musicale prima di avviare RADAR.","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.36 Cloud","id=\"discoveryRadarTab\"","id=\"trackRadarTab\"","id=\"trackRadarShell\"","id=\"trackRadarUrl\"","id=\"trackRadarScan\" type=\"button\" disabled","function setRadarView(view)","id=\"stopScan\" type=\"button\" disabled","stopBtn.disabled=false","stopBtn.disabled=true","new AbortController()","signal:radarAbortController.signal","name==='AbortError'","Inserisci il genere musicale prima di avviare RADAR.","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
-          forbidden=['/api/contact-memory','trackRadarMode','scanPlacements']
+          forbidden=['/api/contact-memory','/api/track-radar','scanPlacements']
           bad=[x for x in forbidden if x in s]
-          if bad: raise SystemExit('unsafe experimental code '+repr(bad))
+          if bad: raise SystemExit('unexpected backend code '+repr(bad))
           print('PASS')
           PY
       - name: Commit candidate to main
@@ -67,5 +69,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.35 safe Track Radar UI shell" || exit 0
+          git commit -m "RADAR v0.4.7.36 Track Radar mode switch" || exit 0
           git push
