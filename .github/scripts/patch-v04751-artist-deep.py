@@ -8,3 +8,4 @@ s=s[:start]+new_scan+s[end:]
 s=s.replace("const VERSION = 'RADAR v0.4.7.50 Cloud';","const VERSION = 'RADAR v0.4.7.51 Cloud';",1)
 s=s.replace('<div class="version">v0.4.7.50</div>','<div class="version">v0.4.7.51</div>',1)
 p.write_text(s)
+# trigger-1
