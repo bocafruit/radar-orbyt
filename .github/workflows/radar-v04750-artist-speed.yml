@@ -1,0 +1,50 @@
+name: RADAR v0.4.7.50 Artist Radar speed
+'on':
+  push:
+    branches:
+      - main
+    paths:
+      - .github/scripts/patch-v04750-artist-speed.py
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Artist Radar speed
+        run: python3 .github/scripts/patch-v04750-artist-speed.py
+      - name: Worker syntax
+        run: node --check worker.js
+      - name: Render HTML like browser and syntax-check client
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm');
+          let s=fs.readFileSync('worker.js','utf8');
+          s=s.replace(/export default[\s\S]*$/,'');
+          s+='\n;globalThis.__HTML=HTML;';
+          const sandbox={URL,URLSearchParams,console,fetch:async()=>({ok:false,json:async()=>({})}),setTimeout,clearTimeout,AbortController};
+          vm.createContext(sandbox);vm.runInContext(s,sandbox);
+          fs.writeFileSync('/tmp/rendered.html',sandbox.__HTML);
+          const scripts=[...sandbox.__HTML.matchAll(/<script(?:[^>]*)>([\s\S]*?)<\/script>/gi)].map(x=>x[1]);
+          if(!scripts.length)throw new Error('No client script');
+          fs.writeFileSync('/tmp/client.js',scripts.join('\n;\n'));
+          NODE
+          node --check /tmp/client.js
+      - name: Regression canaries
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('worker.js').read_text()
+          checks=['RADAR v0.4.7.50 Cloud','id="dateClock"','function updateClock','id="trackRadarTab"','id="trackRadarShell"','id="artistRadarInput"','id="artistRadarScan"','async function scanArtistRadar()','async function artistRadarCatalog(raw,env)','async function artistRadarScan(input,env)',"/api/artist-radar",'id="stopScan" type="button" disabled','/api/health','function trackRadarAlgorithmic(name)',"mode:'fast'","tracks.length>=8","pn.startsWith(an+' radio')"]
+          missing=[x for x in checks if x not in s]
+          assert not missing,missing
+          print('CANARIES PASS')
+          PY
+      - name: Commit only after tests pass
+        run: |
+          git config user.name bocafruit
+          git config user.email chiesastefanojob@gmail.com
+          git add worker.js
+          git commit -m 'RADAR v0.4.7.50 optimize Artist Radar speed'
+          git push origin HEAD:main
