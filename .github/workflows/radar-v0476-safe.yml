@@ -1,0 +1,88 @@
+name: RADAR v0.4.7.46 safe Track Radar patch
+on:
+  push:
+    paths:
+      - '.github/workflows/radar-v0476-safe.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch isolated Track Radar only
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('worker.js')
+          s=p.read_text()
+          base=s
+          assert "const VERSION = 'RADAR v0.4.7.45 Cloud';" in s
+          assert '<div class="dateClock" id="dateClock">—</div>' in s
+          assert 'id="trackRadarTab"' in s and 'id="trackRadarShell"' in s
+          # Version only in existing stable markup.
+          s=s.replace("const VERSION = 'RADAR v0.4.7.45 Cloud';", "const VERSION = 'RADAR v0.4.7.46 Cloud';",1)
+          s=s.replace('<div class="version">v0.4.7.45</div>','<div class="version">v0.4.7.46</div>',1)
+          # Isolated UI: inject before the existing trackRadarResults marker; no bootstrap edits.
+          marker='<div id="trackRadarResults" style="margin-top:14px"></div>'
+          assert marker in s
+          ui='''<div id="s4aImportBox" style="margin-top:14px;padding:13px;border:1px solid #2c3964;border-radius:14px;background:#090d1a"><div style="font-size:11px;font-weight:900;letter-spacing:.1em;color:var(--green)">SPOTIFY FOR ARTISTS · ASSISTED IMPORT</div><div class="status" style="margin:6px 0 9px">Incolla i nomi delle playlist mostrati in Spotify for Artists, uno per riga.</div><textarea id="s4aPlacements" placeholder="SEX EDM - Sensual & Sexy Deep House&#10;Great Vibes: Chill Dance & Feel-Good House&#10;Voodoo 11/09" style="width:100%;min-height:104px;border:1px solid #30385f;background:#0a0d1b;color:#fff;border-radius:12px;padding:11px;resize:vertical;font:inherit"></textarea><div class="actions" style="margin-top:9px"><button class="btn secondary" id="s4aMatch" type="button">Importa e identifica</button><span class="status" id="s4aStatus">0 placement importati</span></div><div id="s4aResults" style="margin-top:10px"></div></div>'''
+          s=s.replace(marker,ui+marker,1)
+          # Append frontend functions immediately before closing script: isolated delegated click handler.
+          close='</script>'
+          assert close in s
+          js=r'''
+function s4aEsc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})}
+async function importS4APlacements(){var ta=document.getElementById('s4aPlacements'),btn=document.getElementById('s4aMatch'),st=document.getElementById('s4aStatus'),box=document.getElementById('s4aResults');if(!ta||!btn||!st||!box)return;if(!trackRadarMeta){st.textContent='Prima inserisci il link Spotify del brano.';return}var names=ta.value.split(/\n+/).map(function(x){return x.trim()}).filter(Boolean).slice(0,20);if(!names.length){st.textContent='Inserisci almeno un nome playlist.';return}btn.disabled=true;st.textContent='Identifico '+names.length+' placement…';box.innerHTML='';try{var r=await fetch('/api/track-radar/import-match',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({names:names,trackId:trackRadarMeta.trackId,track:trackRadarMeta.track,artist:trackRadarMeta.artist})});var d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Import fallito');var rows=Array.isArray(d.matches)?d.matches:[];st.textContent=rows.filter(function(x){return x.status==='MATCHED'||x.status==='LIKELY'}).length+' identificati · '+rows.filter(function(x){return x.status==='EXCLUDED'}).length+' esclusi';box.innerHTML=rows.map(function(x){var link=x.spotifyUrl?'<a class="linkbtn" target="_blank" rel="noopener" href="'+s4aEsc(x.spotifyUrl)+'">Spotify</a>':'';return '<div class="association"><b>'+s4aEsc(x.name||x.inputName)+'</b> · '+s4aEsc(x.status)+' · '+s4aEsc(x.score||0)+'/100<div class="status" style="margin-top:4px">'+s4aEsc(x.reason||x.owner||'')+'</div><div class="cardActions">'+link+'</div></div>'}).join('')}catch(e){st.textContent=e.message||'Errore import'}finally{btn.disabled=false}}
+document.addEventListener('click',function(e){if(e.target&&e.target.id==='s4aMatch')importS4APlacements()});
+'''
+          s=s.replace(close,js+close,1)
+          # Backend helpers inserted before fetch handler routing marker.
+          route="if (url.pathname === '/api/track-radar' && request.method === 'POST')"
+          assert route in s
+          helpers=r'''
+function s4aNameScore(wanted,candidate){var a=normalize(wanted).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(),b=normalize(candidate).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();if(!a||!b)return 0;if(a===b)return 100;if(a.indexOf(b)>=0||b.indexOf(a)>=0)return 90;var aw=new Set(a.split(' ').filter(function(x){return x.length>1})),bw=new Set(b.split(' ').filter(function(x){return x.length>1})),hit=Array.from(aw).filter(function(x){return bw.has(x)}).length;return clamp(Math.round(hit/Math.max(aw.size,bw.size)*88))}
+function s4aAlgorithmic(name){var n=normalize(name).trim();return /^(radio|autoplay|discover weekly|release radar|daylist|daily mix(?: \d+)?|on repeat|repeat rewind|smart shuffle|dj)$/.test(n)||/^radio\b/.test(n)}
+async function s4aCandidates(name,env){var token=await spotifyAccessToken(env);if(!token)return[];var u=new URL('https://api.spotify.com/v1/search');u.searchParams.set('q',name);u.searchParams.set('type','playlist');u.searchParams.set('market',String(env.SPOTIFY_MARKET||'IT').toUpperCase());u.searchParams.set('limit','10');var ctrl=new AbortController(),timer=setTimeout(function(){ctrl.abort()},3500);try{var r=await fetch(u,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},signal:ctrl.signal});if(!r.ok)return[];var d=await r.json();return (d.playlists&&d.playlists.items||[]).filter(Boolean).map(function(x){return {playlistId:String(x.id||''),name:String(x.name||''),owner:String(x.owner&&x.owner.display_name||''),spotifyUrl:String(x.external_urls&&x.external_urls.spotify||('https://open.spotify.com/playlist/'+x.id)),score:s4aNameScore(name,x.name)}}).filter(function(x){return x.playlistId&&x.name})}catch(e){return[]}finally{clearTimeout(timer)}}
+async function s4aImport(input,env){var raw=Array.isArray(input&&input.names)?input.names:[],seen=new Set(),names=[];raw.forEach(function(v){var n=String(v||'').replace(/^\s*(?:[-*•]|\d+[.)])\s*/,'').replace(/\s+(?:[-–—]\s*)?\d+\s*(?:ascolti|listen(?:s)?|stream(?:s)?)\s*$/i,'').trim();var k=normalize(n);if(n&&!seen.has(k)){seen.add(k);names.push(n)}});var out=[];for(var name of names.slice(0,20)){if(s4aAlgorithmic(name)){out.push({inputName:name,name:name,status:'EXCLUDED',score:100,reason:'Sorgente Spotify algoritmica / non curatoriale'});continue}var cs=await s4aCandidates(name,env);cs.sort(function(a,b){return b.score-a.score});var x=cs[0];if(!x||x.score<55){out.push({inputName:name,name:name,status:'REVIEW',score:x?x.score:0,reason:'Nessun match Spotify sufficientemente affidabile'});continue}out.push(Object.assign({inputName:name,status:x.score>=92?'MATCHED':'LIKELY'},x))}return {matches:out}}
+'''
+          s=s.replace(route,helpers+'\n'+route,1)
+          # Add route immediately before existing Track Radar route.
+          newroute="if (url.pathname === '/api/track-radar/import-match' && request.method === 'POST') { const input=await request.json().catch(()=>({})); return json(await s4aImport(input,env)); }\n    "
+          s=s.replace(route,newroute+route,1)
+          p.write_text(s)
+          Path('/tmp/base-worker.js').write_text(base)
+          PY
+      - name: Syntax and regression canaries
+        run: |
+          node --check worker.js
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('worker.js').read_text(); b=Path('/tmp/base-worker.js').read_text()
+          checks=[
+            ("const VERSION = 'RADAR v0.4.7.46 Cloud';" in s,'version'),
+            ('<div class="dateClock" id="dateClock">—</div>' in s,'clock DOM'),
+            (s.count('id="dateClock"')==b.count('id="dateClock"'),'clock unchanged'),
+            ('id="discoveryRadarTab"' in s and 'id="trackRadarTab"' in s,'tabs'),
+            ('id="stopBtn"' in s,'stop'),
+            ('/api/health' in s,'health'),
+            ('id="s4aPlacements"' in s and '/api/track-radar/import-match' in s,'SFA import'),
+            ('s4aAlgorithmic' in s,'algorithmic exclusion'),
+            ('MATCHED' in s and 'LIKELY' in s and 'REVIEW' in s,'match states'),
+          ]
+          bad=[name for ok,name in checks if not ok]
+          if bad: raise SystemExit('CANARY FAIL: '+', '.join(bad))
+          # Stable Track Radar bootstrap must remain byte-identical: existing listener/function strings untouched.
+          for needle in ["document.addEventListener('click',function(e){if(e.target&&e.target.id==='trackRadarScan')scanTrackRadarPlacements()});","async function resolveTrackRadar()","async function scanTrackRadarPlacements()"]:
+            if needle not in s: raise SystemExit('TRACK CANARY FAIL '+needle)
+          print('ALL CANARIES PASS')
+          PY
+      - name: Commit only after checks pass
+        run: |
+          git config user.name "bocafruit"
+          git config user.email "chiesastefanojob@gmail.com"
+          git add worker.js
+          git commit -m "RADAR v0.4.7.46 safe assisted import and faster matching"
+          git push origin HEAD:main
