@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.40 wider Track Radar discovery
+name: RADAR v0.4.7.41 Track Radar diagnostics
 'on':
   push:
     paths:
@@ -10,37 +10,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch Track Radar discovery
+      - name: Patch diagnostics
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          assert "const VERSION = 'RADAR v0.4.7.39 Cloud';" in s
-          old="const queries=['\\\"'+track+'\\\" \\\"'+artist+'\\\" site:open.spotify.com/playlist','\\\"'+artist+'\\\" \\\"'+track+'\\\" Spotify playlist'];const batches=await Promise.all(queries.map(q=>smartSearch(q,env,12)));"
-          new="const queries=['\\\"'+track+'\\\" \\\"'+artist+'\\\"','\\\"'+track+'\\\" \\\"'+artist+'\\\" Spotify','\\\"'+track+'\\\" \\\"'+artist+'\\\" playlist','site:open.spotify.com/playlist \\\"'+track+'\\\" \\\"'+artist+'\\\"','site:open.spotify.com/playlist '+track+' '+artist];const batches=await Promise.all(queries.map(q=>smartSearch(q,env,20)));"
-          assert old in s
-          s=s.replace(old,new,1)
-          old2="const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));if(!text.includes(normalize(track))||!text.includes(normalize(artist)))continue;const clean=cleanPlaylistUrl(r.url||'');if(!clean)continue;"
-          new2="const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));const clean=cleanPlaylistUrl(r.url||'');if(!clean)continue;if(!text.includes(normalize(track))||!text.includes(normalize(artist)))continue;"
-          assert old2 in s
-          s=s.replace(old2,new2,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.39 Cloud';","const VERSION = 'RADAR v0.4.7.40 Cloud';",1)
-          assert '<div class="version">v0.4.7.39</div>' in s
-          s=s.replace('<div class="version">v0.4.7.39</div>','<div class="version">v0.4.7.40</div>',1)
+          assert "const VERSION = 'RADAR v0.4.7.40 Cloud';" in s
+          old="const batches=await Promise.all(queries.map(q=>smartSearch(q,env,20)));const map=new Map();for(const r of batches.flatMap(x=>x.results||[])){"
+          new="const batches=await Promise.all(queries.map(q=>smartSearch(q,env,20)));const rawRows=batches.flatMap(x=>x.results||[]);const diagnostics={queries:queries.map((q,i)=>({query:q,provider:batches[i]?.provider||'',count:(batches[i]?.results||[]).length})),rawCount:rawRows.length,spotifyCandidates:[]};const map=new Map();for(const r of rawRows){"
+          assert old in s; s=s.replace(old,new,1)
+          old2="const clean=cleanPlaylistUrl(r.url||'');if(!clean)continue;if(!text.includes(normalize(track))||!text.includes(normalize(artist)))continue;"
+          new2="const clean=cleanPlaylistUrl(r.url||'');if(!clean)continue;const trackHit=text.includes(normalize(track)),artistHit=text.includes(normalize(artist));diagnostics.spotifyCandidates.push({url:clean,title:String(r.title||'').slice(0,120),trackHit,artistHit});if(!trackHit||!artistHit)continue;"
+          assert old2 in s; s=s.replace(old2,new2,1)
+          old3="return{track,artist,placements,notice:'Risultati basati su evidenze web pubbliche indicizzate; non sono una lista completa di Spotify.'}"
+          new3="return{track,artist,placements,diagnostics:{queries:diagnostics.queries,rawCount:diagnostics.rawCount,spotifyCandidates:diagnostics.spotifyCandidates.slice(0,30)},notice:'Risultati basati su evidenze web pubbliche indicizzate; non sono una lista completa di Spotify.'}"
+          assert old3 in s; s=s.replace(old3,new3,1)
+          old4="if(!list.length){const z=document.createElement('div');z.className='empty';z.textContent='Nessun placement verificabile nelle pagine pubbliche indicizzate.';box.appendChild(z);return}"
+          new4="if(!list.length){const z=document.createElement('div');z.className='empty';const dg=d.diagnostics||{};const qs=Array.isArray(dg.queries)?dg.queries:[];const cs=Array.isArray(dg.spotifyCandidates)?dg.spotifyCandidates:[];z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ');box.appendChild(z);return}"
+          assert old4 in s; s=s.replace(old4,new4,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.40 Cloud';","const VERSION = 'RADAR v0.4.7.41 Cloud';",1)
+          assert '<div class="version">v0.4.7.40</div>' in s
+          s=s.replace('<div class="version">v0.4.7.40</div>','<div class="version">v0.4.7.41</div>',1)
           p.write_text(s)
           PY
-      - name: Syntax and regression canaries
+      - name: Syntax and canaries
         shell: bash
         run: |
           node --check worker.js
           python - <<'PY'
           from pathlib import Path
           import re
-          s=Path('worker.js').read_text()
-          scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I); assert scripts
+          s=Path('worker.js').read_text(); scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I); assert scripts
           Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
-          checks=['RADAR v0.4.7.40 Cloud','smartSearch(q,env,20)',"site:open.spotify.com/playlist",'🟢 CONFERMATO','🟡 PROBABILE','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
+          checks=['RADAR v0.4.7.41 Cloud','const diagnostics=','spotifyCandidates','Diagnostica: ','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
           missing=[x for x in checks if x not in s]; assert not missing, missing
           PY
           node --check /tmp/client.js
@@ -50,5 +53,5 @@ jobs:
           git config user.name bocafruit
           git config user.email chiesastefanojob@gmail.com
           git add worker.js
-          git commit -m 'RADAR v0.4.7.40 wider Track Radar discovery' || exit 0
+          git commit -m 'RADAR v0.4.7.41 Track Radar diagnostics' || exit 0
           git push
