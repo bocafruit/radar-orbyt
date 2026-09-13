@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.36 Track Radar mode switch
+name: RADAR v0.4.7.37 Track Radar metadata validation
 on:
   push:
     paths:
@@ -10,23 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build v0.4.7.36 candidate
+      - name: Build v0.4.7.37 candidate
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          if "const VERSION = 'RADAR v0.4.7.35 Cloud';" not in s: raise SystemExit('version mismatch')
-          old='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><span class="filterChip" style="cursor:default;border-color:var(--green);color:var(--green)">DISCOVERY RADAR</span><span class="filterChip" style="cursor:default">TRACK RADAR · PROSSIMAMENTE</span></div>'
-          new='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="filterChip" id="discoveryRadarTab" type="button" style="border-color:var(--green);color:var(--green)">DISCOVERY RADAR</button><button class="filterChip" id="trackRadarTab" type="button">TRACK RADAR</button></div><div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Brano da verificare</label><input id="trackRadarUrl" placeholder="Incolla link Spotify del brano" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="trackRadarScan" type="button" disabled>Scansiona placement</button><span class="status">Motore placement non ancora collegato.</span></div></div>'
-          if old not in s: raise SystemExit('track shell anchor mismatch')
+          if "const VERSION = 'RADAR v0.4.7.36 Cloud';" not in s: raise SystemExit('version mismatch')
+          old='<button class="btn" id="trackRadarScan" type="button" disabled>Scansiona placement</button><span class="status">Motore placement non ancora collegato.</span>'
+          new='<button class="btn" id="trackRadarScan" type="button" disabled>Scansiona placement</button><span class="status" id="trackRadarStatus">Incolla un link Spotify valido.</span></div><div id="trackRadarPreview" style="display:none;margin-top:12px;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:13px;background:#0a0d1b"></div><div class="status" style="margin-top:9px">In questa versione il pulsante valida il brano. La ricerca placement viene collegata nel prossimo step.</div><div class="actions" style="display:none">'
+          if old not in s: raise SystemExit('track controls anchor mismatch')
           s=s.replace(old,new,1)
-          script_anchor="const $=s=>document.querySelector(s);"
-          addition="const $=s=>document.querySelector(s);\nfunction setRadarView(view){const track=view==='track';const shell=$('#trackRadarShell');const grid=document.querySelector('.panel > .grid');const actions=document.querySelector('.panel > .actions');if(shell)shell.style.display=track?'block':'none';if(grid)grid.style.display=track?'none':'grid';if(actions)actions.style.display=track?'none':'flex';const d=$('#discoveryRadarTab'),t=$('#trackRadarTab');if(d){d.style.borderColor=track?'':'var(--green)';d.style.color=track?'':'var(--green)'}if(t){t.style.borderColor=track?'var(--green)':'';t.style.color=track?'var(--green)':''}}\ndocument.addEventListener('click',function(e){if(e.target&&e.target.id==='discoveryRadarTab')setRadarView('discovery');if(e.target&&e.target.id==='trackRadarTab')setRadarView('track')});"
-          if script_anchor not in s: raise SystemExit('script anchor mismatch')
-          s=s.replace(script_anchor,addition,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.35 Cloud';","const VERSION = 'RADAR v0.4.7.36 Cloud';",1)
-          if '<div class="version">v0.4.7.35</div>' not in s: raise SystemExit('visible version mismatch')
-          s=s.replace('<div class="version">v0.4.7.35</div>','<div class="version">v0.4.7.36</div>',1)
+          anchor="document.addEventListener('click',function(e){if(e.target&&e.target.id==='discoveryRadarTab')setRadarView('discovery');if(e.target&&e.target.id==='trackRadarTab')setRadarView('track')});"
+          add=anchor+"\nlet trackRadarMeta=null;\nasync function resolveTrackRadar(){const el=$('#trackRadarUrl'),preview=$('#trackRadarPreview'),status=$('#trackRadarStatus'),btn=$('#trackRadarScan');if(!el||!preview||!status||!btn)return;const raw=el.value.trim();let u;try{u=new URL(raw)}catch(e){trackRadarMeta=null;preview.style.display='none';btn.disabled=true;status.textContent='Incolla un link Spotify valido.';return}const parts=u.pathname.split('/').filter(Boolean);if(u.hostname!=='open.spotify.com'||parts[0]!=='track'||!parts[1]){trackRadarMeta=null;preview.style.display='none';btn.disabled=true;status.textContent='Serve un link Spotify di un brano.';return}const clean='https://open.spotify.com/track/'+parts[1];status.textContent='Riconosco il brano…';btn.disabled=true;try{const r=await fetch('/api/spotify-track?url='+encodeURIComponent(clean));const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Brano non trovato');trackRadarMeta=d;preview.innerHTML='';preview.style.display='flex';if(d.image){const im=document.createElement('img');im.src=d.image;im.alt='';im.style.cssText='width:54px;height:54px;border-radius:9px;object-fit:cover;flex:0 0 54px';preview.appendChild(im)}const tx=document.createElement('div');const ar=document.createElement('div');ar.textContent=d.artist||'';ar.style.cssText='font-size:12px;font-weight:800;opacity:.82';const tt=document.createElement('strong');tt.textContent=d.track||'Brano Spotify';tx.append(ar,tt);preview.appendChild(tx);btn.disabled=false;status.textContent='Brano riconosciuto · pronto per il motore placement.'}catch(e){trackRadarMeta=null;preview.style.display='none';btn.disabled=true;status.textContent=e.message||'Errore Spotify'}}\nsetTimeout(()=>{const el=$('#trackRadarUrl');if(el){el.addEventListener('input',()=>{clearTimeout(el._tr);el._tr=setTimeout(resolveTrackRadar,220)});el.addEventListener('paste',()=>setTimeout(resolveTrackRadar,30))}},0);"
+          if anchor not in s: raise SystemExit('mode listener anchor mismatch')
+          s=s.replace(anchor,add,1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.36 Cloud';","const VERSION = 'RADAR v0.4.7.37 Cloud';",1)
+          if '<div class="version">v0.4.7.36</div>' not in s: raise SystemExit('visible version mismatch')
+          s=s.replace('<div class="version">v0.4.7.36</div>','<div class="version">v0.4.7.37</div>',1)
           p.write_text(s)
           PY
       - name: Worker syntax
@@ -56,12 +56,12 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path('worker.js').read_text()
-          checks=["RADAR v0.4.7.36 Cloud","id=\"discoveryRadarTab\"","id=\"trackRadarTab\"","id=\"trackRadarShell\"","id=\"trackRadarUrl\"","id=\"trackRadarScan\" type=\"button\" disabled","function setRadarView(view)","id=\"stopScan\" type=\"button\" disabled","stopBtn.disabled=false","stopBtn.disabled=true","new AbortController()","signal:radarAbortController.signal","name==='AbortError'","Inserisci il genere musicale prima di avviare RADAR.","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
+          checks=["RADAR v0.4.7.37 Cloud","id=\"trackRadarStatus\"","id=\"trackRadarPreview\"","async function resolveTrackRadar()","fetch('/api/spotify-track?url='+encodeURIComponent(clean))","Brano riconosciuto · pronto per il motore placement.","function setRadarView(view)","id=\"stopScan\" type=\"button\" disabled","stopBtn.disabled=false","stopBtn.disabled=true","new AbortController()","signal:radarAbortController.signal","name==='AbortError'","Inserisci il genere musicale prima di avviare RADAR.","function updateClock","health').addEventListener","spotifySearchPlaylists","outreachPriority.selected","function fillTemplate"]
           miss=[x for x in checks if x not in s]
           if miss: raise SystemExit('missing '+repr(miss))
           forbidden=['/api/contact-memory','/api/track-radar','scanPlacements']
           bad=[x for x in forbidden if x in s]
-          if bad: raise SystemExit('unexpected backend code '+repr(bad))
+          if bad: raise SystemExit('unexpected placement backend '+repr(bad))
           print('PASS')
           PY
       - name: Commit candidate to main
@@ -69,5 +69,5 @@ jobs:
           git config user.name "bocafruit"
           git config user.email "chiesastefanojob@gmail.com"
           git add worker.js
-          git commit -m "RADAR v0.4.7.36 Track Radar mode switch" || exit 0
+          git commit -m "RADAR v0.4.7.37 Track Radar metadata validation" || exit 0
           git push
