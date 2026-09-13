@@ -1,0 +1,49 @@
+name: RADAR Patch Builder
+'on':
+  push:
+    branches:
+      - 'radar-test/**'
+    paths:
+      - .github/scripts/radar-next-patch.py
+permissions:
+  contents: write
+concurrency:
+  group: radar-patch-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply next RADAR patch
+        run: python3 .github/scripts/radar-next-patch.py
+      - name: Static product canaries
+        run: python3 .github/scripts/radar-ci-check.py
+      - name: Worker syntax
+        run: node --check worker.js
+      - name: Render HTML and check browser JS syntax
+        run: |
+          node - <<'NODE'
+          const fs=require('fs'),vm=require('vm');
+          let s=fs.readFileSync('worker.js','utf8');
+          s=s.replace(/export default[\s\S]*$/,'');
+          s+='\n;globalThis.__HTML=HTML;';
+          const sandbox={URL,URLSearchParams,console,fetch:async()=>({ok:false,json:async()=>({})}),setTimeout,clearTimeout,AbortController,btoa:s=>Buffer.from(s).toString('base64')};
+          vm.createContext(sandbox);vm.runInContext(s,sandbox);
+          const html=String(sandbox.__HTML||'');
+          if(!html.includes('id="dateClock"'))throw new Error('clock missing');
+          if(!html.includes('id="artistRadarScan"'))throw new Error('artist button missing');
+          const scripts=[...html.matchAll(/<script(?:[^>]*)>([\s\S]*?)<\/script>/gi)].map(x=>x[1]);
+          if(!scripts.length)throw new Error('No client script');
+          fs.writeFileSync('/tmp/client.js',scripts.join('\n;\n'));
+          NODE
+          node --check /tmp/client.js
+      - name: Commit tested worker
+        run: |
+          if git diff --quiet -- worker.js; then echo 'No worker changes'; exit 1; fi
+          git config user.name bocafruit
+          git config user.email chiesastefanojob@gmail.com
+          git add worker.js
+          git commit -m "Build next RADAR candidate"
+          git push origin HEAD:${GITHUB_REF_NAME}
