@@ -13,3 +13,4 @@ s=s.replace(old2,new2,1)
 s=s.replace("const VERSION = 'RADAR v0.4.7.45 Cloud';","const VERSION = 'RADAR v0.4.7.46 Cloud';",1)
 s=s.replace('<div class="version">v0.4.7.45</div>','<div class="version">v0.4.7.46</div>',1)
 p.write_text(s)
+# trigger 1
