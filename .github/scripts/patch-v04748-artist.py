@@ -23,9 +23,9 @@ async function artistRadarScan(input,env){const cat=await artistRadarCatalog(inp
 """
 s=s.replace(backend,helpers+backend,1)
 route="if(url.pathname==='/api/track-radar'&&request.method==='POST')"
-assert route in s and "/api/artist-radar" not in s
+assert route in s
 s=s.replace(route,"if(url.pathname==='/api/artist-radar'&&request.method==='POST'){try{return json(await artistRadarScan(await request.json(),env))}catch(e){return json({error:e.message||'Errore Artist Radar'},500)}}"+route,1)
 s=s.replace("const VERSION = 'RADAR v0.4.7.47 Cloud';","const VERSION = 'RADAR v0.4.7.48 Cloud';",1)
 s=s.replace('<div class="version">v0.4.7.47</div>','<div class="version">v0.4.7.48</div>',1)
 p.write_text(s)
-# trigger 1
+# trigger 2
