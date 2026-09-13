@@ -1,4 +1,4 @@
-name: RADAR v0.4.7.39 evidence confidence
+name: RADAR v0.4.7.40 wider Track Radar discovery
 'on':
   push:
     paths:
@@ -10,31 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Patch confidence labels
+      - name: Patch Track Radar discovery
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('worker.js'); s=p.read_text()
-          assert "const VERSION = 'RADAR v0.4.7.38 Cloud';" in s
-          old="const id=parts[1],evidence=String((r.title||'')+' — '+(r.description||'')).trim();if(!map.has(id)||evidence.length>map.get(id).evidence.length)map.set(id,{playlistId:id,spotifyUrl:clean,name:String(r.title||'Spotify playlist').trim(),confidence:'confirmed',evidence:evidence.slice(0,280)});"
-          new="const id=parts[1],evidence=String((r.title||'')+' — '+(r.description||'')).trim();const titleText=normalize(r.title||''),descText=normalize(r.description||'');const explicit=descText.includes(normalize(track))&&descText.includes(normalize(artist));const confidence=explicit?'confirmed':'probable';if(!map.has(id)||evidence.length>map.get(id).evidence.length)map.set(id,{playlistId:id,spotifyUrl:clean,name:String(r.title||'Spotify playlist').trim(),confidence,evidence:evidence.slice(0,280)});"
+          assert "const VERSION = 'RADAR v0.4.7.39 Cloud';" in s
+          old="const queries=['\\\"'+track+'\\\" \\\"'+artist+'\\\" site:open.spotify.com/playlist','\\\"'+artist+'\\\" \\\"'+track+'\\\" Spotify playlist'];const batches=await Promise.all(queries.map(q=>smartSearch(q,env,12)));"
+          new="const queries=['\\\"'+track+'\\\" \\\"'+artist+'\\\"','\\\"'+track+'\\\" \\\"'+artist+'\\\" Spotify','\\\"'+track+'\\\" \\\"'+artist+'\\\" playlist','site:open.spotify.com/playlist \\\"'+track+'\\\" \\\"'+artist+'\\\"','site:open.spotify.com/playlist '+track+' '+artist];const batches=await Promise.all(queries.map(q=>smartSearch(q,env,20)));"
           assert old in s
           s=s.replace(old,new,1)
-          old2="status.textContent=list.length?'Placement confermati: '+list.length:'Nessun placement pubblico confermato trovato.';"
-          new2="const confirmed=list.filter(x=>x.confidence==='confirmed').length,probable=list.length-confirmed;status.textContent=list.length?('Placement: '+confirmed+' confermati'+(probable?' · '+probable+' probabili':'')):'Nessun placement pubblico rilevato.';"
+          old2="const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));if(!text.includes(normalize(track))||!text.includes(normalize(artist)))continue;const clean=cleanPlaylistUrl(r.url||'');if(!clean)continue;"
+          new2="const text=normalize((r.title||'')+' '+(r.description||'')+' '+(r.url||''));const clean=cleanPlaylistUrl(r.url||'');if(!clean)continue;if(!text.includes(normalize(track))||!text.includes(normalize(artist)))continue;"
           assert old2 in s
           s=s.replace(old2,new2,1)
-          old3="meta.textContent='CONFERMATO'+(x.owner?' · '+x.owner:'');"
-          new3="meta.textContent=(x.confidence==='confirmed'?'🟢 CONFERMATO':'🟡 PROBABILE')+(x.owner?' · '+x.owner:'');"
-          assert old3 in s
-          s=s.replace(old3,new3,1)
-          s=s.replace("const VERSION = 'RADAR v0.4.7.38 Cloud';","const VERSION = 'RADAR v0.4.7.39 Cloud';",1)
-          assert '<div class="version">v0.4.7.38</div>' in s
-          s=s.replace('<div class="version">v0.4.7.38</div>','<div class="version">v0.4.7.39</div>',1)
+          s=s.replace("const VERSION = 'RADAR v0.4.7.39 Cloud';","const VERSION = 'RADAR v0.4.7.40 Cloud';",1)
+          assert '<div class="version">v0.4.7.39</div>' in s
+          s=s.replace('<div class="version">v0.4.7.39</div>','<div class="version">v0.4.7.40</div>',1)
           p.write_text(s)
           PY
-      - name: Syntax and canaries
+      - name: Syntax and regression canaries
         shell: bash
         run: |
           node --check worker.js
@@ -44,7 +40,7 @@ jobs:
           s=Path('worker.js').read_text()
           scripts=re.findall(r'<script(?:[^>]*)>(.*?)</script>',s,re.S|re.I); assert scripts
           Path('/tmp/client.js').write_text('\n;\n'.join(scripts))
-          checks=['RADAR v0.4.7.39 Cloud',"confidence=explicit?'confirmed':'probable'",'🟢 CONFERMATO','🟡 PROBABILE','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
+          checks=['RADAR v0.4.7.40 Cloud','smartSearch(q,env,20)',"site:open.spotify.com/playlist",'🟢 CONFERMATO','🟡 PROBABILE','async function trackRadarScan(input,env)',"/api/track-radar",'async function scanTrackRadarPlacements()','function updateClock',"health').addEventListener",'spotifySearchPlaylists','id="stopScan" type="button" disabled']
           missing=[x for x in checks if x not in s]; assert not missing, missing
           PY
           node --check /tmp/client.js
@@ -54,5 +50,5 @@ jobs:
           git config user.name bocafruit
           git config user.email chiesastefanojob@gmail.com
           git add worker.js
-          git commit -m 'RADAR v0.4.7.39 evidence confidence' || exit 0
+          git commit -m 'RADAR v0.4.7.40 wider Track Radar discovery' || exit 0
           git push
