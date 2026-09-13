@@ -14,3 +14,4 @@ s=s.replace(old_front,new_front,1)
 s=s.replace("const VERSION = 'RADAR v0.4.7.51 Cloud';","const VERSION = 'RADAR v0.4.7.52 Cloud';",1)
 s=s.replace('<div class="version">v0.4.7.51</div>','<div class="version">v0.4.7.52</div>',1)
 p.write_text(s)
+# trigger 1
