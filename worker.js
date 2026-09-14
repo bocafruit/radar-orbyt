@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.60 Cloud';
+const VERSION = 'RADAR v0.4.7.61 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.60</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.61</div></div></section>
 <section class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="filterChip" id="discoveryRadarTab" type="button" style="border-color:var(--green);color:var(--green)">DISCOVERY RADAR</button><button class="filterChip" id="trackRadarTab" type="button">ARTIST RADAR</button></div><div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Artista da analizzare</label><input id="artistRadarInput" placeholder="es. ORBYT oppure link profilo Spotify" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="artistRadarScan" type="button">Scansiona artista</button><span class="status" id="artistRadarStatus">Cerca dove compaiono le tracce dell’artista.</span></div><div id="artistRadarSummary" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:13px;background:#0a0d1b"></div><div class="status" style="margin-top:9px">RADAR cerca più tracce dello stesso artista, raggruppa i placement per playlist ed esclude le sorgenti Spotify algoritmiche. I risultati dipendono da ciò che è pubblicamente indicizzato sul web.</div><div id="artistRadarResults" style="margin-top:14px"></div><div class="actions" style="display:none"></div></div>
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
@@ -135,7 +135,7 @@ async function artistRadarRunContactQueue(rows,slots,sum,baseText,token){
   if(token===artistRadarScanToken){for(let i=0;i<slots.length;i++){if(slots[i]&&slots[i].textContent==='🔎 Cerco contatti…')slots[i].textContent='Ricerca contatti terminata.'}artistRadarPublishContactables(state.found);sum.textContent=baseText+' · '+state.found.length+' contattabili · contatti completati';}
 }
 
-async function scanArtistRadar(){const input=document.getElementById('artistRadarInput'),btn=document.getElementById('artistRadarScan'),st=document.getElementById('artistRadarStatus'),sum=document.getElementById('artistRadarSummary'),box=document.getElementById('artistRadarResults');if(!input||!btn||!st||!sum||!box)return;const artist=input.value.trim();if(!artist){st.textContent='Inserisci il nome artista o il link Spotify.';return}const token=++artistRadarScanToken;radarResults=[];paintResults([]);btn.disabled=true;st.textContent='Analizzo catalogo, placement e verifiche pubbliche…';sum.style.display='none';box.innerHTML='';try{const r=await fetch('/api/artist-radar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({artist:artist})});const d=await r.json();if(token!==artistRadarScanToken)return;if(!r.ok||d.error)throw new Error(d.error||'Errore Artist Radar');const tracks=Array.isArray(d.tracks)?d.tracks:[],rows=Array.isArray(d.playlists)?d.playlists:[],vs=d.verificationSummary||{};sum.style.display='block';const baseText=(d.artist||artist)+' · '+tracks.length+' tracce · '+rows.length+' playlist · '+(vs.confirmed||0)+' confermate · '+(vs.probable||0)+' probabili · '+String(d.build||'RADAR')+(d.catalogSource?' · catalogo '+d.catalogSource:'');sum.textContent=baseText+(rows.length?' · contatti in ricerca…':'');st.textContent=rows.length?'Playlist pronte. Ricerca contatti avviata in parallelo.':'Nessuna playlist pubblicamente rilevabile.';const slots=[];for(const x of rows){const card=document.createElement('div');card.className='result';const h=document.createElement('h3');h.textContent=x.name||'Spotify playlist';const verify=document.createElement('div');verify.className='muted';verify.style.cssText='margin:6px 0;font-weight:900';verify.textContent=(x.verification==='CONFIRMED'?'🟢 ':x.verification==='PROBABLE'?'🟡 ':'⚪ ')+(x.verificationLabel||'SOLO EVIDENZA WEB')+' · PLACEMENT '+Number(x.placementConfidence||x.verificationScore||0)+'/100';const meta=document.createElement('div');meta.className='muted';meta.textContent=(x.owner?x.owner+' · ':'')+(x.trackCount||0)+' tracce dell’artista rilevate';const names=document.createElement('div');names.className='muted';names.style.marginTop='6px';names.textContent=(x.tracks||[]).slice(0,8).join(' · ');const cp=document.createElement('div');cp.className='muted';cp.style.cssText='margin-top:9px;padding:9px;border:1px solid #263052;border-radius:11px';cp.textContent='🔎 Cerco contatti…';card.append(h,verify,meta,names,cp);slots.push(cp);if(x.spotifyUrl){const a=document.createElement('a');a.href=x.spotifyUrl;a.target='_blank';a.rel='noopener';a.className='btn secondary';a.style.cssText='display:inline-block;margin-top:10px;text-decoration:none';a.textContent='Apri Spotify';card.appendChild(a)}box.appendChild(card)}btn.disabled=false;if(rows.length)artistRadarRunContactQueue(rows,slots,sum,baseText,token)}catch(e){if(token===artistRadarScanToken){st.textContent=e.message||'Errore Artist Radar';btn.disabled=false}}}
+async function scanArtistRadar(){const input=document.getElementById('artistRadarInput'),btn=document.getElementById('artistRadarScan'),st=document.getElementById('artistRadarStatus'),sum=document.getElementById('artistRadarSummary'),box=document.getElementById('artistRadarResults');if(!input||!btn||!st||!sum||!box)return;const artist=input.value.trim();if(!artist){st.textContent='Inserisci il nome artista o il link Spotify.';return}const token=++artistRadarScanToken;radarResults=[];paintResults([]);btn.disabled=true;st.textContent='Analizzo catalogo, placement e verifiche pubbliche…';sum.style.display='none';box.innerHTML='';try{const r=await fetch('/api/artist-radar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({artist:artist})});const d=await r.json();if(token!==artistRadarScanToken)return;if(!r.ok||d.error)throw new Error(d.error||'Errore Artist Radar');const tracks=Array.isArray(d.tracks)?d.tracks:[],rows=Array.isArray(d.playlists)?d.playlists:[],vs=d.verificationSummary||{};sum.style.display='block';const baseText=(d.artist||artist)+' · '+tracks.length+' tracce · '+rows.length+' playlist · '+(vs.confirmed||0)+' confermate · '+(vs.probable||0)+' probabili · '+String(d.build||'RADAR')+(d.catalogSource?' · catalogo '+d.catalogSource:'');sum.textContent=baseText+(rows.length?' · contatti in ricerca…':'');st.textContent=rows.length?'Playlist pronte. Ricerca contatti avviata in parallelo.':'Nessuna playlist pubblicamente rilevabile.';const slots=[];for(const x of rows){const card=document.createElement('div');card.className='result';const h=document.createElement('h3');h.textContent=x.name||'Spotify playlist';const verify=document.createElement('div');verify.className='muted';verify.style.cssText='margin:6px 0;font-weight:900';verify.textContent=(x.verification==='CONFIRMED'?'🟢 ':x.verification==='PROBABLE'?'🟡 ':'⚪ ')+(x.verificationLabel||'SOLO EVIDENZA WEB')+' · PLACEMENT '+Number(x.placementConfidence||x.verificationScore||0)+'/100';verify.title='Discovery '+Number(x.placementBaseScore||0)+' + verifica '+Number(x.placementVerificationBoost||0);const meta=document.createElement('div');meta.className='muted';meta.textContent=(x.owner?x.owner+' · ':'')+(x.trackCount||0)+' tracce dell’artista rilevate';const names=document.createElement('div');names.className='muted';names.style.marginTop='6px';names.textContent=(x.tracks||[]).slice(0,8).join(' · ');const cp=document.createElement('div');cp.className='muted';cp.style.cssText='margin-top:9px;padding:9px;border:1px solid #263052;border-radius:11px';cp.textContent='🔎 Cerco contatti…';card.append(h,verify,meta,names,cp);slots.push(cp);if(x.spotifyUrl){const a=document.createElement('a');a.href=x.spotifyUrl;a.target='_blank';a.rel='noopener';a.className='btn secondary';a.style.cssText='display:inline-block;margin-top:10px;text-decoration:none';a.textContent='Apri Spotify';card.appendChild(a)}box.appendChild(card)}btn.disabled=false;if(rows.length)artistRadarRunContactQueue(rows,slots,sum,baseText,token)}catch(e){if(token===artistRadarScanToken){st.textContent=e.message||'Errore Artist Radar';btn.disabled=false}}}
 
 document.addEventListener('click',function(e){if(e.target&&e.target.id==='artistRadarScan')scanArtistRadar()});
 
@@ -1163,6 +1163,17 @@ function artistRadarNameMatch(a,b){const x=normalize(a).replace(/[^a-z0-9 ]/g,' 
 async function artistRadarVerifyCandidate(x,cat,env){
   const tracks=[...x.tracks].slice(0,3),domains=new Set(),evidence=[],exactSpotify=new Set(),independentTracks=new Set(),nameMatchedTracks=new Set(),ownerMatchedTracks=new Set();
   const playlistName=String(x.name||'').trim(),owner=String(x.owner||'').trim(),playlistUrl=cleanPlaylistUrl(x.spotifyUrl);
+  const initialEvidence=Array.isArray(x.evidence)?x.evidence.filter(Boolean):[];
+  const trackCount=Number(x.trackCount||tracks.length||0);
+  let baseScore=0;
+  if(playlistUrl)baseScore+=28;
+  if(initialEvidence.length)baseScore+=8;
+  if(playlistName&&normalize(playlistName)!=='spotify playlist')baseScore+=5;
+  if(owner)baseScore+=6;
+  if(trackCount>=2)baseScore+=4;
+  if(x.stage==='fast')baseScore+=3;else if(x.stage==='deep')baseScore+=1;
+  baseScore=Math.min(50,baseScore);
+
   const jobs=[];
   for(const track of tracks){
     const base='"'+track+'" "'+cat.artist+'"';
@@ -1189,21 +1200,26 @@ async function artistRadarVerifyCandidate(x,cat,env){
       if(evidence.length<7)evidence.push(blob.slice(0,280));
     }
   }
+
   const independentDomains=[...domains].filter(d=>d&&d!=='open.spotify.com'&&d!=='spotify.com');
-  const exactCount=exactSpotify.size,independentCount=independentTracks.size,nameCount=nameMatchedTracks.size,ownerCount=ownerMatchedTracks.size,trackCount=Number(x.trackCount||tracks.length||0);
-  let score=0;
-  if(exactCount)score+=40+Math.min(10,(exactCount-1)*5);
-  if(nameCount)score+=15+Math.min(8,(nameCount-1)*4);
-  if(independentCount)score+=25+Math.min(8,(independentCount-1)*4);
-  if(independentDomains.length>=2)score+=7;
-  if(ownerCount)score+=5;
-  if(trackCount>=2)score+=5;
-  if(x.stage==='deep')score+=2;
-  score=Math.min(100,score);
-  let verification='WEB_EVIDENCE',verificationLabel='SOLO EVIDENZA WEB',placementReason='Segnale pubblico presente, ma non abbastanza forte per promuovere il placement.';
-  if(score>=80){verification='CONFIRMED';verificationLabel='CONFERMATO PUBBLICAMENTE';placementReason='Match forte: URL/nome playlist coerente con traccia e artista, supportato da evidenza indipendente.'}
-  else if(score>=55){verification='PROBABLE';verificationLabel='PROBABILE';placementReason='Più segnali coerenti sul placement, ma manca ancora una conferma pubblica completa.'}
-  return {...x,verification,verificationLabel,verificationScore:score,placementConfidence:score,placementReason,verificationDomains:[...domains],verificationEvidence:evidence,exactTrackEvidence:exactCount,independentTrackEvidence:independentCount,nameTrackEvidence:nameCount,ownerTrackEvidence:ownerCount};
+  const exactCount=exactSpotify.size,independentCount=independentTracks.size,nameCount=nameMatchedTracks.size,ownerCount=ownerMatchedTracks.size;
+  let verificationBoost=0;
+  if(exactCount)verificationBoost+=28+Math.min(8,(exactCount-1)*4);
+  if(nameCount)verificationBoost+=10+Math.min(6,(nameCount-1)*3);
+  if(independentCount)verificationBoost+=22+Math.min(8,(independentCount-1)*4);
+  if(independentDomains.length>=2)verificationBoost+=6;
+  if(ownerCount)verificationBoost+=5;
+
+  const score=Math.min(100,baseScore+verificationBoost);
+  let verification='WEB_EVIDENCE',verificationLabel='SOLO EVIDENZA WEB',placementReason='Candidato Spotify coerente emerso dalla discovery, ma senza verifica sufficiente per promuoverlo.';
+  if(score>=80&&(independentCount>=1||exactCount>=2)){
+    verification='CONFIRMED';verificationLabel='CONFERMATO PUBBLICAMENTE';
+    placementReason='Placement forte: discovery coerente e verifica pubblica multipla su traccia, artista e playlist.';
+  }else if(score>=55){
+    verification='PROBABLE';verificationLabel='PROBABILE';
+    placementReason='Discovery coerente più almeno un segnale di verifica aggiuntivo; placement plausibile ma non ancora pienamente confermato.';
+  }
+  return {...x,verification,verificationLabel,verificationScore:score,placementConfidence:score,placementBaseScore:baseScore,placementVerificationBoost:verificationBoost,placementReason,verificationDomains:[...domains],verificationEvidence:evidence,exactTrackEvidence:exactCount,independentTrackEvidence:independentCount,nameTrackEvidence:nameCount,ownerTrackEvidence:ownerCount};
 }
 async function artistRadarEnrichContact(x,env){
   const owner=String(x.owner||'').trim(),name=String(x.name||'').trim();
