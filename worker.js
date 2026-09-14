@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.57 Cloud';
+const VERSION = 'RADAR v0.4.7.58 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.57</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.58</div></div></section>
 <section class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="filterChip" id="discoveryRadarTab" type="button" style="border-color:var(--green);color:var(--green)">DISCOVERY RADAR</button><button class="filterChip" id="trackRadarTab" type="button">ARTIST RADAR</button></div><div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Artista da analizzare</label><input id="artistRadarInput" placeholder="es. ORBYT oppure link profilo Spotify" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="artistRadarScan" type="button">Scansiona artista</button><span class="status" id="artistRadarStatus">Cerca dove compaiono le tracce dell’artista.</span></div><div id="artistRadarSummary" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:13px;background:#0a0d1b"></div><div class="status" style="margin-top:9px">RADAR cerca più tracce dello stesso artista, raggruppa i placement per playlist ed esclude le sorgenti Spotify algoritmiche. I risultati dipendono da ciò che è pubblicamente indicizzato sul web.</div><div id="artistRadarResults" style="margin-top:14px"></div><div class="actions" style="display:none"></div></div>
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
@@ -122,7 +122,7 @@ async function artistRadarFetchContact(x,slot,token){
     if(token!==artistRadarScanToken)return null;
     if(!r.ok||d.error)throw new Error(d.error||'Contatti non disponibili');
     const c=d.contact||{},bits=[];
-    if(c.email)bits.push('✉ '+c.email);if(c.instagram)bits.push('Instagram');if(c.submission)bits.push('Submission');if(c.website)bits.push('Sito');
+    if(c.email)bits.push('✉ '+c.email);if(c.instagram)bits.push('Instagram');if(c.submission)bits.push('Submission');if(c.website)bits.push('Sito');if(c.directSpotify)bits.push('Spotify description');
     const identity=Number(c.identityConfidence||0);
     if(c.contactable){slot.textContent='CONTATTABILE '+(c.score||0)+'/100 · IDENTITÀ '+identity+'/100 · '+bits.join(' · ');slot.style.borderColor='#315f58';return artistRadarToContactResult(x,c)}
     slot.textContent='Nessun contatto pubblico trovato. · IDENTITÀ '+identity+'/100';return null;
@@ -743,16 +743,21 @@ async function spotifyAccessToken(env){
   return token;
 }
 
+const spotifyPlaylistIdentityCache=new Map();
 async function spotifyPlaylistIdentity(spotifyUrl,env){
   const m=String(spotifyUrl||'').match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/i);
   if(!m)return null;
+  const id=m[1],cached=spotifyPlaylistIdentityCache.get(id);
+  if(cached&&Date.now()-cached.at<12*60*60*1000)return cached.value;
   const token=await spotifyAccessToken(env);
   if(!token)return null;
-  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(m[1])+'?fields=id,name,owner(display_name,id,external_urls),external_urls';
+  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(id)+'?fields=id,name,description,followers(total),owner(display_name,id,external_urls),external_urls';
   const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
   if(!r.ok)return null;
   const d=await r.json();
-  return{playlistId:String(d.id||m[1]),name:String(d.name||''),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
+  const value={playlistId:String(d.id||id),name:String(d.name||''),description:String(d.description||''),followers:Number(d.followers?.total||0),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
+  spotifyPlaylistIdentityCache.set(id,{at:Date.now(),value});
+  return value;
 }
 
 async function spotifySearchPlaylists(input,env){
@@ -1156,32 +1161,52 @@ async function artistRadarCatalog(raw,env){
 }
 function artistRadarNameMatch(a,b){const x=normalize(a).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(),y=normalize(b).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();if(!x||!y)return false;if(x===y||x.includes(y)||y.includes(x))return true;const xs=x.split(' ').filter(w=>w.length>2),ys=new Set(y.split(' ').filter(w=>w.length>2));const hit=xs.filter(w=>ys.has(w)).length;return hit>=Math.max(2,Math.ceil(xs.length*.6))}
 async function artistRadarVerifyCandidate(x,cat,env){const tracks=[...x.tracks].slice(0,2),domains=new Set(),evidence=[],exactSpotify=new Set();for(const track of tracks){const q='"'+track+'" "'+cat.artist+'" "'+String(x.name||'').replace(/"/g,'')+'"';const b=await smartSearch(q,env,10);for(const r of b.results||[]){const blob=String((r.title||'')+' '+(r.description||'')+' '+(r.url||'')),text=normalize(blob);if(!text.includes(normalize(track))||!text.includes(normalize(cat.artist)))continue;const host=(()=>{try{return new URL(r.url||'').hostname.replace(/^www\./,'')}catch(e){return''}})();const pu=cleanPlaylistUrl(r.url||'')||cleanPlaylistUrl(blob);const samePlaylist=(pu&&cleanPlaylistUrl(x.spotifyUrl)===pu)||artistRadarNameMatch(x.name,(r.title||'')+' '+(r.description||''));if(!samePlaylist)continue;if(host)domains.add(host);if(pu&&cleanPlaylistUrl(x.spotifyUrl)===pu)exactSpotify.add(track);if(evidence.length<4)evidence.push(blob.slice(0,260))}}const independent=[...domains].filter(Boolean),exactCount=exactSpotify.size;let verification='WEB_EVIDENCE',verificationLabel='SOLO EVIDENZA WEB',verificationScore=35;if(exactCount>=1&&independent.some(d=>d!=='open.spotify.com')){verification='CONFIRMED';verificationLabel='CONFERMATO PUBBLICAMENTE';verificationScore=90}else if(exactCount>=1||independent.length>=2){verification='PROBABLE';verificationLabel='PROBABILE';verificationScore=68}return {...x,verification,verificationLabel,verificationScore,verificationDomains:independent,verificationEvidence:evidence}}
+function artistRadarSpotifyDirectContact(description){
+  const raw=String(description||'').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;/g,"'");
+  const urls=[...raw.matchAll(/https?:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[),.;]+$/,''));
+  const email=(raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||'';
+  const instagram=urls.find(u=>/instagram\.com\/[A-Za-z0-9._-]+/i.test(u))||'';
+  const submission=urls.find(u=>/submit|submission|playlistpush|soundplate|dailyplaylists|groover|submithub|musosoup|pitch|send[-_]?music/i.test(u))||'';
+  const website=urls.find(u=>!/(?:open\.)?spotify\.com|instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com/i.test(u))||'';
+  return {email,instagram,submission,website,raw};
+}
 function artistRadarContactScore(c){let n=0;if(c.email)n+=45;if(c.instagram)n+=25;if(c.submission)n+=25;if(c.website)n+=10;return Math.min(100,n)}
 async function artistRadarEnrichContact(x,env){
   const owner=String(x.owner||'').trim(),name=String(x.name||'').trim();
-  const q='"'+name.replace(/"/g,'')+'" '+(owner?'"'+owner.replace(/"/g,'')+'" ':'')+'playlist curator contact Instagram email submit';
-  const b=await smartSearch(q,env,10).catch(()=>({results:[]}));
-  let email='',instagram='',submission='',website='',evidence=[];
-  const blocked=/open\.spotify\.com|spotify\.com/i;
-  for(const r of b.results||[]){
-    const blob=String((r.title||'')+' '+(r.description||'')+' '+(r.url||''));
-    if(!artistRadarNameMatch(name,blob)&&owner&&!normalize(blob).includes(normalize(owner)))continue;
-    if(!email){const m=blob.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);if(m)email=m[0]}
-    if(!instagram){const m=blob.match(/https?:\/\/(?:www\.)?instagram\.com\/[A-Za-z0-9._-]+\/?/i);if(m)instagram=m[0]}
-    const url=String(r.url||'');
-    if(!submission&&/submit|submission|playlistpush|soundplate|dailyplaylists|groover|submithub/i.test(blob)&&/^https?:/i.test(url)&&!blocked.test(url))submission=url;
-    if(!website&&/^https?:/i.test(url)&&!blocked.test(url)&&!/instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com/i.test(url))website=url;
-    if(evidence.length<3)evidence.push(blob.slice(0,220));
+  let spotify=null;try{spotify=await spotifyPlaylistIdentity(x.spotifyUrl,env)}catch(e){}
+  const direct=artistRadarSpotifyDirectContact(spotify?.description||'');
+  let email=direct.email||'',instagram=direct.instagram||'',submission=direct.submission||'',website=direct.website||'',evidence=[];
+  const directFound=!!(email||instagram||submission||website);
+  if(directFound)evidence.push('SPOTIFY DESCRIPTION · '+String(spotify?.description||'').slice(0,260));
+  const initial={email,instagram,submission,website};
+  const needWeb=artistRadarContactScore(initial)<70;
+  if(needWeb){
+    const q='"'+name.replace(/"/g,'')+'" '+(owner?'"'+owner.replace(/"/g,'')+'" ':'')+'playlist curator contact Instagram email submit';
+    const b=await smartSearch(q,env,10).catch(()=>({results:[]}));
+    const blocked=/open\.spotify\.com|spotify\.com/i;
+    for(const r of b.results||[]){
+      const blob=String((r.title||'')+' '+(r.description||'')+' '+(r.url||''));
+      if(!artistRadarNameMatch(name,blob)&&owner&&!normalize(blob).includes(normalize(owner)))continue;
+      if(!email){const m=blob.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);if(m)email=m[0]}
+      if(!instagram){const m=blob.match(/https?:\/\/(?:www\.)?instagram\.com\/[A-Za-z0-9._-]+\/?/i);if(m)instagram=m[0]}
+      const url=String(r.url||'');
+      if(!submission&&/submit|submission|playlistpush|soundplate|dailyplaylists|groover|submithub/i.test(blob)&&/^https?:/i.test(url)&&!blocked.test(url))submission=url;
+      if(!website&&/^https?:/i.test(url)&&!blocked.test(url)&&!/instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com/i.test(url))website=url;
+      if(evidence.length<4)evidence.push(blob.slice(0,220));
+    }
   }
-  const contact={email,instagram,submission,website,evidence};
+  const contact={email,instagram,submission,website,evidence,directSpotify:directFound,source:directFound?'Spotify description':'Web',followers:Number(spotify?.followers||0)};
   contact.score=artistRadarContactScore(contact);
-  const normOwner=normalize(owner),normName=normalize(name);let identity=25;
-  for(const ev of evidence){const ne=normalize(ev);if(normOwner&&ne.includes(normOwner))identity+=25;if(normName&&artistRadarNameMatch(name,ev))identity+=15}
+  const normOwner=normalize(owner),normName=normalize(name);let identity=directFound?70:25;
+  if(directFound&&spotify?.spotifyVerified)identity+=10;
+  if(directFound&&owner&&spotify?.owner&&normalize(owner)===normalize(spotify.owner))identity+=10;
+  for(const ev of evidence){const ne=normalize(ev);if(normOwner&&ne.includes(normOwner))identity+=15;if(normName&&artistRadarNameMatch(name,ev))identity+=10}
   if(email&&owner&&normalize(email).includes(normOwner.replace(/\s+/g,'')))identity+=10;
   contact.identityConfidence=Math.min(100,identity);
   contact.contactable=contact.score>=25;
   return {...x,contact};
 }
+
 async function artistRadarScan(input,env){const cat=await artistRadarCatalog(input?.artist,env),playlistMap=new Map(),foundTracks=new Set();const ingest=(track,batch,stage)=>{for(const r of batch.results||[]){let clean=cleanPlaylistUrl(r.url||'');if(!clean){const m=String((r.title||'')+' '+(r.description||'')).match(/https?:\/\/open\.spotify\.com\/playlist\/[A-Za-z0-9]+/i);if(m)clean=cleanPlaylistUrl(m[0])}if(!clean)continue;const blob=String((r.title||'')+' '+(r.description||'')),text=normalize(blob);if(!text.includes(normalize(track))||!text.includes(normalize(cat.artist)))continue;const id=new URL(clean).pathname.split('/').filter(Boolean)[1];if(!id)continue;foundTracks.add(normalize(track));let x=playlistMap.get(id);if(!x){x={playlistId:id,spotifyUrl:clean,name:String(r.title||'Spotify playlist').trim(),owner:'',tracks:new Set(),evidence:[],stages:new Set()};playlistMap.set(id,x)}x.tracks.add(track);x.stages.add(stage);if(x.evidence.length<3)x.evidence.push(blob.slice(0,240))}};const fastJobs=cat.tracks.map(t=>({track:t.name,p:smartSearch('\"'+t.name+'\" \"'+cat.artist+'\" Spotify playlist',env,12)}));const fast=await Promise.all(fastJobs.map(async j=>({track:j.track,batch:await j.p})));for(const j of fast)ingest(j.track,j.batch,'fast');const missing=cat.tracks.filter(t=>!foundTracks.has(normalize(t.name))).slice(0,5);if(missing.length&&playlistMap.size<8){const deepJobs=[];for(const t of missing){deepJobs.push({track:t.name,p:smartSearch('site:open.spotify.com/playlist \"'+t.name+'\" \"'+cat.artist+'\"',env,16)});deepJobs.push({track:t.name,p:smartSearch('\"'+t.name+'\" \"'+cat.artist+'\" playlist Spotify -album -track',env,16)})}const deep=await Promise.all(deepJobs.map(async j=>({track:j.track,batch:await j.p})));for(const j of deep)ingest(j.track,j.batch,'deep')}const candidates=[...playlistMap.values()].slice(0,12);const enriched=await Promise.all(candidates.map(async x=>{try{const ident=await spotifyPlaylistIdentity(x.spotifyUrl,env);if(ident){x.name=ident.name||x.name;x.owner=ident.owner||''}}catch(e){}return x}));const filtered=[];const an=normalize(cat.artist).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();for(const x of enriched){const pn=normalize(x.name).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();if(trackRadarAlgorithmic(x.name)||pn.startsWith(an+' radio'))continue;const tracks=[...x.tracks],stages=[...x.stages];filtered.push({...x,tracks,trackCount:tracks.length,stage:stages.includes('deep')?'deep':'fast'})}const verified=await Promise.all(filtered.slice(0,8).map(x=>artistRadarVerifyCandidate(x,cat,env)));verified.sort((a,b)=>b.verificationScore-a.verificationScore||b.trackCount-a.trackCount||String(a.name).localeCompare(String(b.name)));return {artist:cat.artist,artistId:cat.artistId||'',catalogSource:cat.catalogSource||'',tracks:cat.tracks,playlists:verified,mode:'verified-fast',build:VERSION,deepTracks:missing.map(x=>x.name),contactSummary:{contactable:0,pending:Math.min(6,verified.length)},verificationSummary:{confirmed:verified.filter(x=>x.verification==='CONFIRMED').length,probable:verified.filter(x=>x.verification==='PROBABLE').length,web:verified.filter(x=>x.verification==='WEB_EVIDENCE').length}}}
 async function artistRadarContactLookup(input,env){
   const p=input&&input.playlist||{};
