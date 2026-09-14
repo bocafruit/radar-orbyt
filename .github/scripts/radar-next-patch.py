@@ -1,63 +1,107 @@
 from pathlib import Path
 p=Path('worker.js')
 s=p.read_text()
-assert "const VERSION = 'RADAR v0.4.7.56 Cloud';" in s
-old="""  const contact={email,instagram,submission,website,evidence};
-  contact.score=artistRadarContactScore(contact);
-  contact.contactable=contact.score>=25;
-  return {...x,contact};"""
+assert "const VERSION = 'RADAR v0.4.7.57 Cloud';" in s
+
+# 1) Upgrade Spotify playlist identity with short-lived cache + description/followers.
+old=r'''async function spotifyPlaylistIdentity(spotifyUrl,env){
+  const m=String(spotifyUrl||'').match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/i);
+  if(!m)return null;
+  const token=await spotifyAccessToken(env);
+  if(!token)return null;
+  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(m[1])+'?fields=id,name,owner(display_name,id,external_urls),external_urls';
+  const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
+  if(!r.ok)return null;
+  const d=await r.json();
+  return{playlistId:String(d.id||m[1]),name:String(d.name||''),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
+}
+'''
 assert old in s
-new="""  const contact={email,instagram,submission,website,evidence};
+new=r'''const spotifyPlaylistIdentityCache=new Map();
+async function spotifyPlaylistIdentity(spotifyUrl,env){
+  const m=String(spotifyUrl||'').match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/i);
+  if(!m)return null;
+  const id=m[1],cached=spotifyPlaylistIdentityCache.get(id);
+  if(cached&&Date.now()-cached.at<12*60*60*1000)return cached.value;
+  const token=await spotifyAccessToken(env);
+  if(!token)return null;
+  const u='https://api.spotify.com/v1/playlists/'+encodeURIComponent(id)+'?fields=id,name,description,followers(total),owner(display_name,id,external_urls),external_urls';
+  const r=await fetch(u,{headers:{'Authorization':'Bearer '+token,'Accept':'application/json'}});
+  if(!r.ok)return null;
+  const d=await r.json();
+  const value={playlistId:String(d.id||id),name:String(d.name||''),description:String(d.description||''),followers:Number(d.followers?.total||0),owner:String(d.owner?.display_name||''),ownerId:String(d.owner?.id||''),ownerUrl:String(d.owner?.external_urls?.spotify||''),spotifyVerified:true};
+  spotifyPlaylistIdentityCache.set(id,{at:Date.now(),value});
+  return value;
+}
+'''
+s=s.replace(old,new,1)
+
+# 2) Direct-contact parser: use Spotify description before expensive web enrichment.
+marker='function artistRadarContactScore(c){'
+assert marker in s
+helper=r'''function artistRadarSpotifyDirectContact(description){
+  const raw=String(description||'').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;/g,"'");
+  const urls=[...raw.matchAll(/https?:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[),.;]+$/,''));
+  const email=(raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||'';
+  const instagram=urls.find(u=>/instagram\.com\/[A-Za-z0-9._-]+/i.test(u))||'';
+  const submission=urls.find(u=>/submit|submission|playlistpush|soundplate|dailyplaylists|groover|submithub|musosoup|pitch|send[-_]?music/i.test(u))||'';
+  const website=urls.find(u=>!/(?:open\.)?spotify\.com|instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com/i.test(u))||'';
+  return {email,instagram,submission,website,raw};
+}
+'''
+s=s.replace(marker,helper+marker,1)
+
+# 3) Contact enrichment now prioritizes direct Spotify description evidence.
+start=s.index('async function artistRadarEnrichContact(x,env){')
+end=s.index('\nasync function artistRadarScan(',start)
+old_block=s[start:end]
+new_block=r'''async function artistRadarEnrichContact(x,env){
+  const owner=String(x.owner||'').trim(),name=String(x.name||'').trim();
+  let spotify=null;try{spotify=await spotifyPlaylistIdentity(x.spotifyUrl,env)}catch(e){}
+  const direct=artistRadarSpotifyDirectContact(spotify?.description||'');
+  let email=direct.email||'',instagram=direct.instagram||'',submission=direct.submission||'',website=direct.website||'',evidence=[];
+  const directFound=!!(email||instagram||submission||website);
+  if(directFound)evidence.push('SPOTIFY DESCRIPTION · '+String(spotify?.description||'').slice(0,260));
+  const initial={email,instagram,submission,website};
+  const needWeb=artistRadarContactScore(initial)<70;
+  if(needWeb){
+    const q='"'+name.replace(/"/g,'')+'" '+(owner?'"'+owner.replace(/"/g,'')+'" ':'')+'playlist curator contact Instagram email submit';
+    const b=await smartSearch(q,env,10).catch(()=>({results:[]}));
+    const blocked=/open\.spotify\.com|spotify\.com/i;
+    for(const r of b.results||[]){
+      const blob=String((r.title||'')+' '+(r.description||'')+' '+(r.url||''));
+      if(!artistRadarNameMatch(name,blob)&&owner&&!normalize(blob).includes(normalize(owner)))continue;
+      if(!email){const m=blob.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);if(m)email=m[0]}
+      if(!instagram){const m=blob.match(/https?:\/\/(?:www\.)?instagram\.com\/[A-Za-z0-9._-]+\/?/i);if(m)instagram=m[0]}
+      const url=String(r.url||'');
+      if(!submission&&/submit|submission|playlistpush|soundplate|dailyplaylists|groover|submithub/i.test(blob)&&/^https?:/i.test(url)&&!blocked.test(url))submission=url;
+      if(!website&&/^https?:/i.test(url)&&!blocked.test(url)&&!/instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com/i.test(url))website=url;
+      if(evidence.length<4)evidence.push(blob.slice(0,220));
+    }
+  }
+  const contact={email,instagram,submission,website,evidence,directSpotify:directFound,source:directFound?'Spotify description':'Web',followers:Number(spotify?.followers||0)};
   contact.score=artistRadarContactScore(contact);
-  const normOwner=normalize(owner),normName=normalize(name);let identity=25;
-  for(const ev of evidence){const ne=normalize(ev);if(normOwner&&ne.includes(normOwner))identity+=25;if(normName&&artistRadarNameMatch(name,ev))identity+=15}
-  if(email&&owner&&normalize(email).includes(normOwner.replace(/\\s+/g,'')))identity+=10;
+  const normOwner=normalize(owner),normName=normalize(name);let identity=directFound?70:25;
+  if(directFound&&spotify?.spotifyVerified)identity+=10;
+  if(directFound&&owner&&spotify?.owner&&normalize(owner)===normalize(spotify.owner))identity+=10;
+  for(const ev of evidence){const ne=normalize(ev);if(normOwner&&ne.includes(normOwner))identity+=15;if(normName&&artistRadarNameMatch(name,ev))identity+=10}
+  if(email&&owner&&normalize(email).includes(normOwner.replace(/\s+/g,'')))identity+=10;
   contact.identityConfidence=Math.min(100,identity);
   contact.contactable=contact.score>=25;
-  return {...x,contact};"""
-s=s.replace(old,new,1)
-old="""  const out=await artistRadarEnrichContact(x,env);
-  return {playlistId:x.playlistId||'',spotifyUrl:x.spotifyUrl||'',contact:out.contact||{email:'',instagram:'',submission:'',website:'',evidence:[],score:0,contactable:false}};"""
-assert old in s
-new="""  const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('Contact timeout')),9500));
-  const out=await Promise.race([artistRadarEnrichContact(x,env),timeout]);
-  return {playlistId:x.playlistId||'',spotifyUrl:x.spotifyUrl||'',contact:out.contact||{email:'',instagram:'',submission:'',website:'',evidence:[],score:0,identityConfidence:0,contactable:false}};"""
-s=s.replace(old,new,1)
-start=s.index('async function artistRadarFetchContact(')
-end=s.index('\nasync function scanArtistRadar()',start)
-new_block=r'''function artistRadarToContactResult(x,c){return {name:x.name||'Spotify playlist',sourceTitle:x.name||'',curator:x.owner||'',spotifyUrl:x.spotifyUrl||'',email:c.email||'',instagram:c.instagram||'',instagramHandle:c.instagram||'',submission:c.submission||'',site:c.website||'',emailConfidence:c.identityConfidence||0,instagramConfidence:c.identityConfidence||0,submissionConfidence:c.identityConfidence||0,siteConfidence:c.identityConfidence||0,contactability:c.score||0,opportunityScore:Math.round(((c.score||0)*0.6)+((c.identityConfidence||0)*0.4)),match:x.verificationScore||0,confidence:c.identityConfidence||0,badge:(c.identityConfidence||0)>=75?'Strong Match':(c.identityConfidence||0)>=50?'Worth Checking':'Weak Match'};}
-function artistRadarPublishContactables(found){
-  radarResults=found.slice();
-  paintResults(sortedFilteredResults());
-}
-async function artistRadarFetchContact(x,slot,token){
-  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),11000);
-  try{
-    const r=await fetch('/api/artist-radar/contact',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({playlist:{playlistId:x.playlistId||'',spotifyUrl:x.spotifyUrl||'',name:x.name||'',owner:x.owner||''}}),signal:ctrl.signal});
-    const d=await r.json();
-    if(token!==artistRadarScanToken)return null;
-    if(!r.ok||d.error)throw new Error(d.error||'Contatti non disponibili');
-    const c=d.contact||{},bits=[];
-    if(c.email)bits.push('✉ '+c.email);if(c.instagram)bits.push('Instagram');if(c.submission)bits.push('Submission');if(c.website)bits.push('Sito');
-    const identity=Number(c.identityConfidence||0);
-    if(c.contactable){slot.textContent='CONTATTABILE '+(c.score||0)+'/100 · IDENTITÀ '+identity+'/100 · '+bits.join(' · ');slot.style.borderColor='#315f58';return artistRadarToContactResult(x,c)}
-    slot.textContent='Nessun contatto pubblico trovato. · IDENTITÀ '+identity+'/100';return null;
-  }catch(e){if(token===artistRadarScanToken)slot.textContent=e&&e.name==='AbortError'?'Ricerca contatti scaduta.':'Nessun contatto pubblico trovato.';return null}finally{clearTimeout(timer)}
-}
-async function artistRadarRunContactQueue(rows,slots,sum,baseText,token){
-  const jobs=rows.map((x,i)=>({x,slot:slots[i]})).filter(j=>j.slot),state={next:0,done:0,found:[]};
-  const work=async()=>{while(state.next<jobs.length&&token===artistRadarScanToken){const j=jobs[state.next++];const hit=await artistRadarFetchContact(j.x,j.slot,token);if(hit)state.found.push(hit);state.done++;if(token===artistRadarScanToken){artistRadarPublishContactables(state.found);sum.textContent=baseText+' · '+state.found.length+' contattabili · contatti '+state.done+'/'+jobs.length}}};
-  await Promise.all([work(),work()]);
-  if(token===artistRadarScanToken){for(let i=0;i<slots.length;i++){if(slots[i]&&slots[i].textContent==='🔎 Cerco contatti…')slots[i].textContent='Ricerca contatti terminata.'}artistRadarPublishContactables(state.found);sum.textContent=baseText+' · '+state.found.length+' contattabili · contatti completati';}
+  return {...x,contact};
 }
 '''
 s=s[:start]+new_block+s[end:]
-old="""const token=++artistRadarScanToken;btn.disabled=true;st.textContent='Analizzo catalogo, placement e verifiche pubbliche…';sum.style.display='none';box.innerHTML='';try{"""
+
+# 4) Surface the high-value direct source in the progressive Artist Radar result.
+old="if(c.email)bits.push('✉ '+c.email);if(c.instagram)bits.push('Instagram');if(c.submission)bits.push('Submission');if(c.website)bits.push('Sito');"
 assert old in s
-new="""const token=++artistRadarScanToken;radarResults=[];paintResults([]);btn.disabled=true;st.textContent='Analizzo catalogo, placement e verifiche pubbliche…';sum.style.display='none';box.innerHTML='';try{"""
+new="if(c.email)bits.push('✉ '+c.email);if(c.instagram)bits.push('Instagram');if(c.submission)bits.push('Submission');if(c.website)bits.push('Sito');if(c.directSpotify)bits.push('Spotify description');"
 s=s.replace(old,new,1)
-s=s.replace("const VERSION = 'RADAR v0.4.7.56 Cloud';","const VERSION = 'RADAR v0.4.7.57 Cloud';",1)
-s=s.replace('<div class="version">v0.4.7.56</div>','<div class="version">v0.4.7.57</div>',1)
-for needle in ["RADAR v0.4.7.57 Cloud","identityConfidence","artistRadarPublishContactables","rows.map((x,i)","Promise.race([artistRadarEnrichContact","contatti completati"]:
+
+s=s.replace("const VERSION = 'RADAR v0.4.7.57 Cloud';","const VERSION = 'RADAR v0.4.7.58 Cloud';",1)
+s=s.replace('<div class="version">v0.4.7.57</div>','<div class="version">v0.4.7.58</div>',1)
+
+for needle in ["RADAR v0.4.7.58 Cloud","spotifyPlaylistIdentityCache","description,followers(total)","artistRadarSpotifyDirectContact","directSpotify","Spotify description","needWeb=artistRadarContactScore(initial)<70"]:
     assert needle in s, needle
 p.write_text(s)
