@@ -1,13 +1,60 @@
 from pathlib import Path
 p=Path('worker.js')
 s=p.read_text()
-assert "const VERSION = 'RADAR v0.4.7.60 Cloud';" in s
+assert "const VERSION = 'RADAR v0.4.7.61 Cloud';" in s
 
-# Recalibrate Placement Confidence: discovery evidence is the baseline,
-# verification evidence raises confidence instead of starting from zero.
+# RADAR .62: direct verification from Spotify public embed trackList.
+# Web scoring remains only as fallback when the public playlist tracklist cannot certify presence.
 start=s.index('async function artistRadarVerifyCandidate(x,cat,env){')
 end=s.index('\nasync function artistRadarEnrichContact(',start)
-new=r'''async function artistRadarVerifyCandidate(x,cat,env){
+new=r'''function artistRadarTrackId(url){
+  try{const u=new URL(String(url||''));const p=u.pathname.split('/').filter(Boolean);return p[0]==='track'&&p[1]?p[1]:''}catch(e){return''}
+}
+function artistRadarEmbedEntity(html){
+  const m=String(html||'').match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+  if(!m)return null;
+  try{
+    let node=JSON.parse(m[1]);
+    for(const k of ['props','pageProps','state','data','entity']){if(!node||typeof node!=='object')return null;node=node[k]}
+    return node&&typeof node==='object'?node:null;
+  }catch(e){return null}
+}
+async function artistRadarDirectPlaylistCheck(x,cat){
+  const playlistId=String(x.playlistId||'').trim()||(()=>{try{const u=new URL(x.spotifyUrl);const p=u.pathname.split('/').filter(Boolean);return p[0]==='playlist'&&p[1]?p[1]:''}catch(e){return''}})();
+  if(!playlistId)return {available:false,reason:'playlist-id-missing',matches:[]};
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6500);
+  try{
+    const r=await fetch('https://open.spotify.com/embed/playlist/'+encodeURIComponent(playlistId),{headers:{'Accept':'text/html,application/xhtml+xml','User-Agent':'Mozilla/5.0 RADAR/1.0'},signal:controller.signal});
+    if(!r.ok)return {available:false,reason:'embed-http-'+r.status,matches:[]};
+    const entity=artistRadarEmbedEntity(await r.text());
+    if(!entity)return {available:false,reason:'embed-parse',matches:[]};
+    const list=Array.isArray(entity.trackList)?entity.trackList:[];
+    const total=Number(entity.trackCount||entity.totalTracks||0)||0;
+    const byId=new Map(),byName=new Map();
+    for(const t of cat.tracks||[]){const id=artistRadarTrackId(t.spotifyUrl);if(id)byId.set(id,t.name);byName.set(normalize(t.name),t.name)}
+    const matches=[];
+    for(const t of list){
+      const uri=String(t?.uri||''),id=uri.startsWith('spotify:track:')?uri.split(':').pop():String(t?.id||'');
+      const title=String(t?.title||t?.name||'').trim(),subtitle=String(t?.subtitle||t?.artist||'').trim();
+      let hit=id&&byId.get(id);
+      if(!hit&&title&&normalize(subtitle).includes(normalize(cat.artist)))hit=byName.get(normalize(title));
+      if(hit&&!matches.includes(hit))matches.push(hit);
+    }
+    const complete=total>0&&list.length>=total;
+    const partial=total>0?list.length<total:list.length>=95;
+    return {available:true,source:'spotify-embed',playlistId,visibleTracks:list.length,totalTracks:total||null,complete,partial,matches};
+  }catch(e){return {available:false,reason:e&&e.name==='AbortError'?'embed-timeout':'embed-error',matches:[]}}
+  finally{clearTimeout(timer)}
+}
+async function artistRadarVerifyCandidate(x,cat,env){
+  const direct=await artistRadarDirectPlaylistCheck(x,cat);
+  if(direct.matches&&direct.matches.length){
+    return {...x,verification:'CONFIRMED',verificationLabel:'VERIFICATO DIRETTAMENTE',verificationScore:100,placementConfidence:100,placementBaseScore:100,placementVerificationBoost:0,placementReason:'Traccia ORBYT trovata direttamente nella tracklist pubblica Spotify.',directVerified:true,directSource:direct.source,directMatchedTracks:direct.matches,directVisibleTracks:direct.visibleTracks,directTotalTracks:direct.totalTracks,directPartial:direct.partial,verificationDomains:['open.spotify.com'],verificationEvidence:['spotify-embed trackList']};
+  }
+  if(direct.available&&direct.complete){
+    return {...x,verification:'REJECTED',verificationLabel:'SCARTATO · NON PRESENTE',verificationScore:0,placementConfidence:0,placementBaseScore:0,placementVerificationBoost:0,placementReason:'Tracklist pubblica Spotify completa controllata: nessuna traccia del catalogo artista trovata.',directVerified:false,directSource:direct.source,directMatchedTracks:[],directVisibleTracks:direct.visibleTracks,directTotalTracks:direct.totalTracks,directPartial:false,verificationDomains:['open.spotify.com'],verificationEvidence:['spotify-embed complete no-match']};
+  }
+
   const tracks=[...x.tracks].slice(0,3),domains=new Set(),evidence=[],exactSpotify=new Set(),independentTracks=new Set(),nameMatchedTracks=new Set(),ownerMatchedTracks=new Set();
   const playlistName=String(x.name||'').trim(),owner=String(x.owner||'').trim(),playlistUrl=cleanPlaylistUrl(x.spotifyUrl);
   const initialEvidence=Array.isArray(x.evidence)?x.evidence.filter(Boolean):[];
@@ -20,63 +67,49 @@ new=r'''async function artistRadarVerifyCandidate(x,cat,env){
   if(trackCount>=2)baseScore+=4;
   if(x.stage==='fast')baseScore+=3;else if(x.stage==='deep')baseScore+=1;
   baseScore=Math.min(50,baseScore);
-
   const jobs=[];
   for(const track of tracks){
     const base='"'+track+'" "'+cat.artist+'"';
-    jobs.push({track,p:smartSearch(base+' "'+playlistName.replace(/"/g,'')+'"',env,10)});
-    jobs.push({track,p:smartSearch(base+' Spotify playlist "'+playlistName.replace(/"/g,'')+'"',env,10)});
+    jobs.push({track,p:smartSearch(base+' "'+playlistName.replace(/"/g,'')+'"',env,8)});
   }
   const batches=await Promise.all(jobs.map(async j=>({track:j.track,batch:await j.p})));
-  for(const j of batches){
-    const track=j.track;
-    for(const r of j.batch.results||[]){
-      const title=String(r.title||''),desc=String(r.description||''),url=String(r.url||''),blob=title+' '+desc+' '+url,text=normalize(blob);
-      if(!text.includes(normalize(track))||!text.includes(normalize(cat.artist)))continue;
-      const host=(()=>{try{return new URL(url).hostname.replace(/^www\./,'')}catch(e){return''}})();
-      const pu=cleanPlaylistUrl(url)||cleanPlaylistUrl(blob);
-      const exactUrl=!!(pu&&playlistUrl&&pu===playlistUrl);
-      const nameMatch=artistRadarNameMatch(playlistName,title+' '+desc);
-      const ownerMatch=!!(owner&&normalize(blob).includes(normalize(owner)));
-      if(!exactUrl&&!nameMatch)continue;
-      if(host)domains.add(host);
-      if(exactUrl)exactSpotify.add(track);
-      if(nameMatch)nameMatchedTracks.add(track);
-      if(ownerMatch)ownerMatchedTracks.add(track);
-      if(host&&host!=='open.spotify.com'&&host!=='spotify.com')independentTracks.add(track);
-      if(evidence.length<7)evidence.push(blob.slice(0,280));
-    }
-  }
-
-  const independentDomains=[...domains].filter(d=>d&&d!=='open.spotify.com'&&d!=='spotify.com');
-  const exactCount=exactSpotify.size,independentCount=independentTracks.size,nameCount=nameMatchedTracks.size,ownerCount=ownerMatchedTracks.size;
-  let verificationBoost=0;
-  if(exactCount)verificationBoost+=28+Math.min(8,(exactCount-1)*4);
-  if(nameCount)verificationBoost+=10+Math.min(6,(nameCount-1)*3);
-  if(independentCount)verificationBoost+=22+Math.min(8,(independentCount-1)*4);
-  if(independentDomains.length>=2)verificationBoost+=6;
-  if(ownerCount)verificationBoost+=5;
-
-  const score=Math.min(100,baseScore+verificationBoost);
-  let verification='WEB_EVIDENCE',verificationLabel='SOLO EVIDENZA WEB',placementReason='Candidato Spotify coerente emerso dalla discovery, ma senza verifica sufficiente per promuoverlo.';
-  if(score>=80&&(independentCount>=1||exactCount>=2)){
-    verification='CONFIRMED';verificationLabel='CONFERMATO PUBBLICAMENTE';
-    placementReason='Placement forte: discovery coerente e verifica pubblica multipla su traccia, artista e playlist.';
-  }else if(score>=55){
-    verification='PROBABLE';verificationLabel='PROBABILE';
-    placementReason='Discovery coerente più almeno un segnale di verifica aggiuntivo; placement plausibile ma non ancora pienamente confermato.';
-  }
-  return {...x,verification,verificationLabel,verificationScore:score,placementConfidence:score,placementBaseScore:baseScore,placementVerificationBoost:verificationBoost,placementReason,verificationDomains:[...domains],verificationEvidence:evidence,exactTrackEvidence:exactCount,independentTrackEvidence:independentCount,nameTrackEvidence:nameCount,ownerTrackEvidence:ownerCount};
+  for(const j of batches){for(const r of j.batch.results||[]){
+    const title=String(r.title||''),desc=String(r.description||''),url=String(r.url||''),blob=title+' '+desc+' '+url,text=normalize(blob);
+    if(!text.includes(normalize(j.track))||!text.includes(normalize(cat.artist)))continue;
+    const host=(()=>{try{return new URL(url).hostname.replace(/^www\./,'')}catch(e){return''}})(),pu=cleanPlaylistUrl(url)||cleanPlaylistUrl(blob),exactUrl=!!(pu&&playlistUrl&&pu===playlistUrl),nameMatch=artistRadarNameMatch(playlistName,title+' '+desc),ownerMatch=!!(owner&&normalize(blob).includes(normalize(owner)));
+    if(!exactUrl&&!nameMatch)continue;if(host)domains.add(host);if(exactUrl)exactSpotify.add(j.track);if(nameMatch)nameMatchedTracks.add(j.track);if(ownerMatch)ownerMatchedTracks.add(j.track);if(host&&host!=='open.spotify.com'&&host!=='spotify.com')independentTracks.add(j.track);if(evidence.length<5)evidence.push(blob.slice(0,260));
+  }}
+  const independentDomains=[...domains].filter(d=>d&&d!=='open.spotify.com'&&d!=='spotify.com'),exactCount=exactSpotify.size,independentCount=independentTracks.size,nameCount=nameMatchedTracks.size,ownerCount=ownerMatchedTracks.size;
+  let boost=0;if(exactCount)boost+=20;if(nameCount)boost+=8;if(independentCount)boost+=18;if(independentDomains.length>=2)boost+=5;if(ownerCount)boost+=4;
+  const raw=Math.min(79,baseScore+boost),partial=!!direct.partial;
+  let verification='WEB_EVIDENCE',verificationLabel=partial?'CANDIDATO · TRACKLIST PARZIALE':'SOLO EVIDENZA WEB';
+  if(raw>=55){verification='PROBABLE';verificationLabel=partial?'PROBABILE · TRACKLIST PARZIALE':'PROBABILE'}
+  return {...x,verification,verificationLabel,verificationScore:raw,placementConfidence:raw,placementBaseScore:baseScore,placementVerificationBoost:boost,placementReason:partial?'Spotify Embed disponibile ma tracklist parziale: presenza non certificabile se la traccia non appare nella porzione visibile.':'Verifica diretta Spotify non disponibile; confidenza basata solo su evidenza pubblica secondaria.',directVerified:false,directSource:direct.source||'',directMatchedTracks:[],directVisibleTracks:direct.visibleTracks||0,directTotalTracks:direct.totalTracks||null,directPartial:partial,verificationDomains:[...domains],verificationEvidence:evidence,exactTrackEvidence:exactCount,independentTrackEvidence:independentCount,nameTrackEvidence:nameCount,ownerTrackEvidence:ownerCount};
 }'''
 s=s[:start]+new+s[end:]
 
-old="verify.textContent=(x.verification==='CONFIRMED'?'🟢 ':x.verification==='PROBABLE'?'🟡 ':'⚪ ')+(x.verificationLabel||'SOLO EVIDENZA WEB')+' · PLACEMENT '+Number(x.placementConfidence||x.verificationScore||0)+'/100';"
+# Do not spend contact-enrichment calls on unverified weak candidates.
+old="const jobs=rows.map((x,i)=>({x,slot:slots[i]})).filter(j=>j.slot),state={next:0,done:0,found:[]};"
 assert old in s
-new="verify.textContent=(x.verification==='CONFIRMED'?'🟢 ':x.verification==='PROBABLE'?'🟡 ':'⚪ ')+(x.verificationLabel||'SOLO EVIDENZA WEB')+' · PLACEMENT '+Number(x.placementConfidence||x.verificationScore||0)+'/100';verify.title='Discovery '+Number(x.placementBaseScore||0)+' + verifica '+Number(x.placementVerificationBoost||0);"
+new="for(let i=0;i<rows.length;i++){if(slots[i]&&rows[i]&&rows[i].verification!=='CONFIRMED'&&rows[i].verification!=='PROBABLE')slots[i].textContent='Contatti sospesi: placement non verificato.'}const jobs=rows.map((x,i)=>({x,slot:slots[i]})).filter(j=>j.slot&&(j.x.verification==='CONFIRMED'||j.x.verification==='PROBABLE')),state={next:0,done:0,found:[]};"
 s=s.replace(old,new,1)
 
-s=s.replace("const VERSION = 'RADAR v0.4.7.60 Cloud';","const VERSION = 'RADAR v0.4.7.61 Cloud';",1)
-s=s.replace('<div class="version">v0.4.7.60</div>','<div class="version">v0.4.7.61</div>',1)
-for needle in ['RADAR v0.4.7.61 Cloud','placementBaseScore','placementVerificationBoost','baseScore+=28','score>=55','Discovery \'']:
+# Remove directly disproved candidates from the user-facing list, but count them in diagnostics.
+old="const verified=await Promise.all(filtered.slice(0,8).map(x=>artistRadarVerifyCandidate(x,cat,env)));verified.sort((a,b)=>b.verificationScore-a.verificationScore||b.trackCount-a.trackCount||String(a.name).localeCompare(String(b.name)));return {artist:cat.artist,artistId:cat.artistId||'',catalogSource:cat.catalogSource||'',tracks:cat.tracks,playlists:verified,mode:'verified-fast',build:VERSION,deepTracks:missing.map(x=>x.name),contactSummary:{contactable:0,pending:Math.min(6,verified.length)},verificationSummary:{confirmed:verified.filter(x=>x.verification==='CONFIRMED').length,probable:verified.filter(x=>x.verification==='PROBABLE').length,web:verified.filter(x=>x.verification==='WEB_EVIDENCE').length}}"
+assert old in s
+new="const checked=await Promise.all(filtered.slice(0,8).map(x=>artistRadarVerifyCandidate(x,cat,env)));const rejected=checked.filter(x=>x.verification==='REJECTED'),verified=checked.filter(x=>x.verification!=='REJECTED');verified.sort((a,b)=>(b.directVerified?1:0)-(a.directVerified?1:0)||b.verificationScore-a.verificationScore||b.trackCount-a.trackCount||String(a.name).localeCompare(String(b.name)));return {artist:cat.artist,artistId:cat.artistId||'',catalogSource:cat.catalogSource||'',tracks:cat.tracks,playlists:verified,mode:'direct-verify',build:VERSION,deepTracks:missing.map(x=>x.name),directVerification:{checked:checked.length,rejected:rejected.length,verified:verified.filter(x=>x.directVerified).length,partial:verified.filter(x=>x.directPartial).length},contactSummary:{contactable:0,pending:verified.filter(x=>x.verification==='CONFIRMED'||x.verification==='PROBABLE').length},verificationSummary:{confirmed:verified.filter(x=>x.verification==='CONFIRMED').length,probable:verified.filter(x=>x.verification==='PROBABLE').length,web:verified.filter(x=>x.verification==='WEB_EVIDENCE').length,rejected:rejected.length}}"
+s=s.replace(old,new,1)
+
+# Prefer direct matched tracks in UI and expose direct verification source.
+old="names.textContent=(x.tracks||[]).slice(0,8).join(' · ');"
+assert old in s
+s=s.replace(old,"names.textContent=((x.directMatchedTracks&&x.directMatchedTracks.length)?x.directMatchedTracks:(x.tracks||[])).slice(0,8).join(' · ');",1)
+old="verify.title='Discovery '+Number(x.placementBaseScore||0)+' + verifica '+Number(x.placementVerificationBoost||0);"
+assert old in s
+s=s.replace(old,"verify.title=x.directVerified?'Spotify public embed: track match diretto':'Discovery '+Number(x.placementBaseScore||0)+' + verifica '+Number(x.placementVerificationBoost||0);",1)
+
+s=s.replace("const VERSION = 'RADAR v0.4.7.61 Cloud';","const VERSION = 'RADAR v0.4.7.62 Cloud';",1)
+s=s.replace('<div class="version">v0.4.7.61</div>','<div class="version">v0.4.7.62</div>',1)
+for needle in ['RADAR v0.4.7.62 Cloud','artistRadarDirectPlaylistCheck','__NEXT_DATA__','VERIFICATO DIRETTAMENTE','TRACKLIST PARZIALE','directVerified','mode:\'direct-verify\'','Contatti sospesi: placement non verificato.']:
     assert needle in s, needle
 p.write_text(s)
