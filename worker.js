@@ -1,4 +1,4 @@
-const VERSION = 'RADAR v0.4.7.58 Cloud';
+const VERSION = 'RADAR v0.4.7.59 Cloud';
 const BRAVE_API = 'https://api.search.brave.com/res/v1/web/search';
 const SERPAPI_API = 'https://serpapi.com/search';
 const TAVILY_API = 'https://api.tavily.com/search';
@@ -73,7 +73,7 @@ const HTML = `<!doctype html>
 </style>
 </head>
 <body><main class="wrap">
-<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.58</div></div></section>
+<section class="hero"><div class="brand"><div class="radar"><div class="beam"></div></div><div><h1>RADAR</h1><div class="sub" data-i18n="subtitle">Playlist Intelligence</div></div></div><div class="heroTools"><div class="dateClock" id="dateClock">—</div><select id="language" class="langSelect" aria-label="Language"><option value="it">IT</option><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option></select><div class="version">v0.4.7.59</div></div></section>
 <section class="panel"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="filterChip" id="discoveryRadarTab" type="button" style="border-color:var(--green);color:var(--green)">DISCOVERY RADAR</button><button class="filterChip" id="trackRadarTab" type="button">ARTIST RADAR</button></div><div id="trackRadarShell" style="display:none;margin-bottom:14px"><div class="field"><label>Artista da analizzare</label><input id="artistRadarInput" placeholder="es. ORBYT oppure link profilo Spotify" autocomplete="off" /></div><div class="actions" style="margin-top:10px"><button class="btn" id="artistRadarScan" type="button">Scansiona artista</button><span class="status" id="artistRadarStatus">Cerca dove compaiono le tracce dell’artista.</span></div><div id="artistRadarSummary" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:13px;background:#0a0d1b"></div><div class="status" style="margin-top:9px">RADAR cerca più tracce dello stesso artista, raggruppa i placement per playlist ed esclude le sorgenti Spotify algoritmiche. I risultati dipendono da ciò che è pubblicamente indicizzato sul web.</div><div id="artistRadarResults" style="margin-top:14px"></div><div class="actions" style="display:none"></div></div>
 <div class="grid">
 <div class="field"><label data-i18n="genreLabel">Genere principale</label><input id="genre" value="" placeholder="es. melodic techno" autocomplete="off" /></div>
@@ -109,7 +109,7 @@ setTimeout(()=>{const el=$('#trackRadarUrl');if(el){el.addEventListener('input',
 async function scanTrackRadarPlacements(){const btn=$('#trackRadarScan'),status=$('#trackRadarStatus'),box=$('#trackRadarResults');if(!trackRadarMeta||!btn||!status||!box)return;btn.disabled=true;status.textContent='Scansione placement pubblici…';box.innerHTML='';try{const r=await fetch('/api/track-radar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({track:trackRadarMeta.track,artist:trackRadarMeta.artist})});const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||'Errore scansione');const list=Array.isArray(d.placements)?d.placements:[];const confirmed=list.filter(x=>x.confidence==='confirmed').length,probable=list.length-confirmed;status.textContent=list.length?('Placement: '+confirmed+' confermati'+(probable?' · '+probable+' probabili':'')):'Nessun placement pubblico rilevato.';if(!list.length){const z=document.createElement('div');z.className='empty';const dg=d.diagnostics||{};const qs=Array.isArray(dg.queries)?dg.queries:[];const cs=Array.isArray(dg.spotifyCandidates)?dg.spotifyCandidates:[];const rs=Array.isArray(dg.rawSample)?dg.rawSample:[];z.textContent='Diagnostica: '+(dg.rawCount||0)+' risultati grezzi · '+cs.length+' candidati Spotify. '+qs.map(q=>(q.provider||'?')+':'+(q.count||0)).join(' · ');box.appendChild(z);rs.slice(0,8).forEach((r,i)=>{const row=document.createElement('div');row.className='empty';row.style.marginTop='8px';row.style.padding='12px';row.style.fontSize='12px';row.style.textAlign='left';row.style.wordBreak='break-word';row.textContent='RAW '+(i+1)+' — '+(r.title||'-')+' — '+(r.url||'-');box.appendChild(row)});return}for(const x of list){const card=document.createElement('div');card.className='result';const h=document.createElement('h3');h.textContent=x.name||'Spotify playlist';const meta=document.createElement('div');meta.className='muted';meta.textContent=(x.confidence==='confirmed'?'🟢 CONFERMATO':'🟡 PROBABILE')+(x.owner?' · '+x.owner:'');const ev=document.createElement('div');ev.className='muted';ev.style.marginTop='6px';ev.textContent=x.evidence||'Titolo e artista rilevati in evidenza pubblica indicizzata.';const a=document.createElement('a');a.href=x.spotifyUrl;a.target='_blank';a.rel='noopener';a.className='btn secondary';a.style.cssText='display:inline-block;margin-top:10px;text-decoration:none';a.textContent='Apri Spotify';card.append(h,meta,ev,a);box.appendChild(card)}}catch(e){status.textContent=e.message||'Errore Track Radar'}finally{btn.disabled=!trackRadarMeta}}
 document.addEventListener('click',function(e){if(e.target&&e.target.id==='trackRadarScan')scanTrackRadarPlacements()});
 let artistRadarScanToken=0;
-function artistRadarToContactResult(x,c){return {name:x.name||'Spotify playlist',sourceTitle:x.name||'',curator:x.owner||'',spotifyUrl:x.spotifyUrl||'',email:c.email||'',instagram:c.instagram||'',instagramHandle:c.instagram||'',submission:c.submission||'',site:c.website||'',emailConfidence:c.identityConfidence||0,instagramConfidence:c.identityConfidence||0,submissionConfidence:c.identityConfidence||0,siteConfidence:c.identityConfidence||0,contactability:c.score||0,opportunityScore:Math.round(((c.score||0)*0.6)+((c.identityConfidence||0)*0.4)),match:x.verificationScore||0,confidence:c.identityConfidence||0,badge:(c.identityConfidence||0)>=75?'Strong Match':(c.identityConfidence||0)>=50?'Worth Checking':'Weak Match'};}
+function artistRadarToContactResult(x,c){const qualified=x.verification==='CONFIRMED'||x.verification==='PROBABLE';if(!qualified)return null;return {name:x.name||'Spotify playlist',sourceTitle:x.name||'',curator:x.owner||'',spotifyUrl:x.spotifyUrl||'',email:c.email||'',instagram:c.instagram||'',instagramHandle:c.instagram||'',submission:c.submission||'',site:c.website||'',emailConfidence:c.identityConfidence||0,instagramConfidence:c.identityConfidence||0,submissionConfidence:c.identityConfidence||0,siteConfidence:c.identityConfidence||0,contactability:c.score||0,opportunityScore:Math.round(((c.score||0)*0.45)+((c.identityConfidence||0)*0.25)+((x.verificationScore||0)*0.30)),match:x.verificationScore||0,confidence:c.identityConfidence||0,badge:x.verification==='CONFIRMED'?'Verified Placement':'Probable Placement'};}
 function artistRadarPublishContactables(found){
   radarResults=found.slice();
   paintResults(sortedFilteredResults());
@@ -124,7 +124,7 @@ async function artistRadarFetchContact(x,slot,token){
     const c=d.contact||{},bits=[];
     if(c.email)bits.push('✉ '+c.email);if(c.instagram)bits.push('Instagram');if(c.submission)bits.push('Submission');if(c.website)bits.push('Sito');if(c.directSpotify)bits.push('Spotify description');
     const identity=Number(c.identityConfidence||0);
-    if(c.contactable){slot.textContent='CONTATTABILE '+(c.score||0)+'/100 · IDENTITÀ '+identity+'/100 · '+bits.join(' · ');slot.style.borderColor='#315f58';return artistRadarToContactResult(x,c)}
+    if(c.contactable){const qualified=x.verification==='CONFIRMED'||x.verification==='PROBABLE';slot.textContent=(qualified?'CONTATTABILE ':'CONTATTO TROVATO · PLACEMENT DA VERIFICARE · ')+(c.score||0)+'/100 · IDENTITÀ '+identity+'/100 · '+bits.join(' · ');slot.style.borderColor=qualified?'#315f58':'#4a4f68';return artistRadarToContactResult(x,c)}
     slot.textContent='Nessun contatto pubblico trovato. · IDENTITÀ '+identity+'/100';return null;
   }catch(e){if(token===artistRadarScanToken)slot.textContent=e&&e.name==='AbortError'?'Ricerca contatti scaduta.':'Nessun contatto pubblico trovato.';return null}finally{clearTimeout(timer)}
 }
@@ -1160,17 +1160,30 @@ async function artistRadarCatalog(raw,env){
   return {artist:artistName,artistId,tracks:tracks.slice(0,12),catalogSource};
 }
 function artistRadarNameMatch(a,b){const x=normalize(a).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim(),y=normalize(b).replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();if(!x||!y)return false;if(x===y||x.includes(y)||y.includes(x))return true;const xs=x.split(' ').filter(w=>w.length>2),ys=new Set(y.split(' ').filter(w=>w.length>2));const hit=xs.filter(w=>ys.has(w)).length;return hit>=Math.max(2,Math.ceil(xs.length*.6))}
-async function artistRadarVerifyCandidate(x,cat,env){const tracks=[...x.tracks].slice(0,2),domains=new Set(),evidence=[],exactSpotify=new Set();for(const track of tracks){const q='"'+track+'" "'+cat.artist+'" "'+String(x.name||'').replace(/"/g,'')+'"';const b=await smartSearch(q,env,10);for(const r of b.results||[]){const blob=String((r.title||'')+' '+(r.description||'')+' '+(r.url||'')),text=normalize(blob);if(!text.includes(normalize(track))||!text.includes(normalize(cat.artist)))continue;const host=(()=>{try{return new URL(r.url||'').hostname.replace(/^www\./,'')}catch(e){return''}})();const pu=cleanPlaylistUrl(r.url||'')||cleanPlaylistUrl(blob);const samePlaylist=(pu&&cleanPlaylistUrl(x.spotifyUrl)===pu)||artistRadarNameMatch(x.name,(r.title||'')+' '+(r.description||''));if(!samePlaylist)continue;if(host)domains.add(host);if(pu&&cleanPlaylistUrl(x.spotifyUrl)===pu)exactSpotify.add(track);if(evidence.length<4)evidence.push(blob.slice(0,260))}}const independent=[...domains].filter(Boolean),exactCount=exactSpotify.size;let verification='WEB_EVIDENCE',verificationLabel='SOLO EVIDENZA WEB',verificationScore=35;if(exactCount>=1&&independent.some(d=>d!=='open.spotify.com')){verification='CONFIRMED';verificationLabel='CONFERMATO PUBBLICAMENTE';verificationScore=90}else if(exactCount>=1||independent.length>=2){verification='PROBABLE';verificationLabel='PROBABILE';verificationScore=68}return {...x,verification,verificationLabel,verificationScore,verificationDomains:independent,verificationEvidence:evidence}}
-function artistRadarSpotifyDirectContact(description){
-  const raw=String(description||'').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;/g,"'");
-  const urls=[...raw.matchAll(/https?:\/\/[^\s<>"']+/gi)].map(m=>m[0].replace(/[),.;]+$/,''));
-  const email=(raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||'';
-  const instagram=urls.find(u=>/instagram\.com\/[A-Za-z0-9._-]+/i.test(u))||'';
-  const submission=urls.find(u=>/submit|submission|playlistpush|soundplate|dailyplaylists|groover|submithub|musosoup|pitch|send[-_]?music/i.test(u))||'';
-  const website=urls.find(u=>!/(?:open\.)?spotify\.com|instagram\.com|facebook\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com/i.test(u))||'';
-  return {email,instagram,submission,website,raw};
+async function artistRadarVerifyCandidate(x,cat,env){
+  const tracks=[...x.tracks].slice(0,3),domains=new Set(),evidence=[],exactSpotify=new Set(),independentTracks=new Set();
+  for(const track of tracks){
+    const q='"'+track+'" "'+cat.artist+'" "'+String(x.name||'').replace(/"/g,'')+'"';
+    const b=await smartSearch(q,env,10);
+    for(const r of b.results||[]){
+      const blob=String((r.title||'')+' '+(r.description||'')+' '+(r.url||'')),text=normalize(blob);
+      if(!text.includes(normalize(track))||!text.includes(normalize(cat.artist)))continue;
+      const host=(()=>{try{return new URL(r.url||'').hostname.replace(/^www\./,'')}catch(e){return''}})();
+      const pu=cleanPlaylistUrl(r.url||'')||cleanPlaylistUrl(blob);
+      const samePlaylist=(pu&&cleanPlaylistUrl(x.spotifyUrl)===pu)||artistRadarNameMatch(x.name,(r.title||'')+' '+(r.description||''));
+      if(!samePlaylist)continue;
+      if(host)domains.add(host);
+      if(pu&&cleanPlaylistUrl(x.spotifyUrl)===pu)exactSpotify.add(track);
+      if(host&&host!=='open.spotify.com'&&host!=='spotify.com')independentTracks.add(track);
+      if(evidence.length<5)evidence.push(blob.slice(0,260));
+    }
+  }
+  const independent=[...domains].filter(d=>d&&d!=='open.spotify.com'&&d!=='spotify.com'),exactCount=exactSpotify.size,independentCount=independentTracks.size,trackCount=Number(x.trackCount||x.tracks?.size||tracks.length||0);
+  let verification='WEB_EVIDENCE',verificationLabel='SOLO EVIDENZA WEB',verificationScore=30,placementReason='Segnale pubblico non sufficiente per confermare il placement.';
+  if(exactCount>=1&&independentCount>=1){verification='CONFIRMED';verificationLabel='CONFERMATO PUBBLICAMENTE';verificationScore=Math.min(98,88+Math.min(6,independentCount*3)+Math.min(4,exactCount*2));placementReason='URL Spotify coerente + evidenza pubblica indipendente su traccia, artista e playlist.'}
+  else if(independentCount>=1||(exactCount>=1&&trackCount>=2)){verification='PROBABLE';verificationLabel='PROBABILE';verificationScore=independentCount?70:62;placementReason=independentCount?'Evidenza indipendente coerente, ma conferma Spotify incompleta.':'URL Spotify coerente su più tracce, senza seconda fonte indipendente.'}
+  return {...x,verification,verificationLabel,verificationScore,placementConfidence:verificationScore,placementReason,verificationDomains:[...domains],verificationEvidence:evidence,exactTrackEvidence:exactCount,independentTrackEvidence:independentCount};
 }
-function artistRadarContactScore(c){let n=0;if(c.email)n+=45;if(c.instagram)n+=25;if(c.submission)n+=25;if(c.website)n+=10;return Math.min(100,n)}
 async function artistRadarEnrichContact(x,env){
   const owner=String(x.owner||'').trim(),name=String(x.name||'').trim();
   let spotify=null;try{spotify=await spotifyPlaylistIdentity(x.spotifyUrl,env)}catch(e){}
