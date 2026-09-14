@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // deploy trigger: RADAR v0.4.7.57 Cloud
+  // deploy trigger: RADAR v0.4.7.58 Cloud
   "name": "radar-orbyt",
   "main": "worker.js",
   "compatibility_date": "2026-09-09",
