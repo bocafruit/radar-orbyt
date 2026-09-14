@@ -44,10 +44,15 @@ for marker in [
 ]:
     assert marker in s, f'Discovery Radar regression: {marker}'
 
-# Artist Radar verification contract introduced in .52+.
+# Artist Radar verification contract. .62+ adds direct Spotify public-embed verification.
 if 'artistRadarVerifyCandidate' in s:
-    for marker in ['verificationSummary','CONFERMATO PUBBLICAMENTE','PROBABILE','SOLO EVIDENZA WEB']:
+    for marker in ['verificationSummary','PROBABILE','SOLO EVIDENZA WEB']:
         assert marker in s, f'Artist verification contract missing: {marker}'
+    if 'artistRadarDirectPlaylistCheck' in s:
+        for marker in ['VERIFICATO DIRETTAMENTE','TRACKLIST PARZIALE','directVerified','__NEXT_DATA__']:
+            assert marker in s, f'Direct verification contract missing: {marker}'
+    else:
+        assert 'CONFERMATO PUBBLICAMENTE' in s, 'Legacy verification contract missing'
 
 # Ensure HTML response remains explicitly non-cached so production deploy checks are meaningful.
 assert "'cache-control':'no-store'" in s, 'Homepage must remain no-store'
